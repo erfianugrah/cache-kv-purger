@@ -1,0 +1,132 @@
+[
+  {
+    "key": "test-key-1741198817315373651-0",
+    "value": {
+      "index": 0,
+      "message": "This is test item 1",
+      "time": "2025-03-05T19:20:17+01:00"
+    },
+    "metadata": {
+      "cache-tag": "product",
+      "generated": 1741198817,
+      "test": true
+    }
+  },
+  {
+    "key": "test-key-1741198817315446123-1",
+    "value": {
+      "index": 1,
+      "message": "This is test item 2",
+      "time": "2025-03-05T19:20:17+01:00"
+    },
+    "metadata": {
+      "cache-tag": "blog",
+      "generated": 1741198817,
+      "test": true
+    }
+  },
+  {
+    "key": "test-key-1741198817315448293-2",
+    "value": {
+      "index": 2,
+      "message": "This is test item 3",
+      "time": "2025-03-05T19:20:17+01:00"
+    },
+    "metadata": {
+      "cache-tag": "homepage",
+      "generated": 1741198817,
+      "test": true
+    }
+  },
+  {
+    "key": "test-key-1741198817315449343-3",
+    "value": {
+      "index": 3,
+      "message": "This is test item 4",
+      "time": "2025-03-05T19:20:17+01:00"
+    },
+    "metadata": {
+      "cache-tag": "api",
+      "generated": 1741198817,
+      "test": true
+    }
+  },
+  {
+    "key": "test-key-1741198817315450173-4",
+    "value": {
+      "index": 4,
+      "message": "This is test item 5",
+      "time": "2025-03-05T19:20:17+01:00"
+    },
+    "metadata": {
+      "cache-tag": "product",
+      "generated": 1741198817,
+      "test": true
+    }
+  },
+  {
+    "key": "test-key-1741198817315451243-5",
+    "value": {
+      "index": 5,
+      "message": "This is test item 6",
+      "time": "2025-03-05T19:20:17+01:00"
+    },
+    "metadata": {
+      "cache-tag": "blog",
+      "generated": 1741198817,
+      "test": true
+    }
+  },
+  {
+    "key": "test-key-1741198817315452023-6",
+    "value": {
+      "index": 6,
+      "message": "This is test item 7",
+      "time": "2025-03-05T19:20:17+01:00"
+    },
+    "metadata": {
+      "cache-tag": "homepage",
+      "generated": 1741198817,
+      "test": true
+    }
+  },
+  {
+    "key": "test-key-1741198817315452894-7",
+    "value": {
+      "index": 7,
+      "message": "This is test item 8",
+      "time": "2025-03-05T19:20:17+01:00"
+    },
+    "metadata": {
+      "cache-tag": "api",
+      "generated": 1741198817,
+      "test": true
+    }
+  },
+  {
+    "key": "test-key-1741198817315453614-8",
+    "value": {
+      "index": 8,
+      "message": "This is test item 9",
+      "time": "2025-03-05T19:20:17+01:00"
+    },
+    "metadata": {
+      "cache-tag": "product",
+      "generated": 1741198817,
+      "test": true
+    }
+  },
+  {
+    "key": "test-key-1741198817315454314-9",
+    "value": {
+      "index": 9,
+      "message": "This is test item 10",
+      "time": "2025-03-05T19:20:17+01:00"
+    },
+    "metadata": {
+      "cache-tag": "blog",
+      "generated": 1741198817,
+      "test": true
+    }
+  }
+]

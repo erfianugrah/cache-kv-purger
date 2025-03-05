@@ -819,11 +819,12 @@ func createKVConfigCmd() *cobra.Command {
 }
 
 // createPurgeByTagCmd creates a command to purge KV values by cache-tag
+// This is now just a wrapper around the streaming purge command which is more efficient
 func createPurgeByTagCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "purge-by-tag",
-		Short: "Purge KV values by cache-tag",
-		Long:  `Find and delete KV values with matching cache-tag field value.`,
+		Short: "Purge KV values by cache-tag (legacy command, use purge-by-tag-streaming instead)",
+		Long:  `Find and delete KV values with matching cache-tag field value. This is a legacy command, please use purge-by-tag-streaming for better performance.`,
 		Example: `  # Purge all entries with a specific cache-tag value
   cache-kv-purger kv purge-by-tag --namespace-id your-namespace-id --tag-value "homepage"
 
@@ -832,9 +833,6 @@ func createPurgeByTagCmd() *cobra.Command {
 
   # Use a different field name instead of cache-tag
   cache-kv-purger kv purge-by-tag --namespace-id your-namespace-id --field "category" --tag-value "blog"
-
-  # Use memory-efficient mode for small namespaces
-  cache-kv-purger kv purge-by-tag --namespace-id your-namespace-id --tag-value "api" --memory-efficient
 
   # Preview what would be deleted without actually deleting
   cache-kv-purger kv purge-by-tag --namespace-id your-namespace-id --tag-value "product" --dry-run`,
@@ -892,264 +890,84 @@ func createPurgeByTagCmd() *cobra.Command {
 			// Get the tag value to match
 			tagValue := kvFlagsVars.value
 			
-			// Check if memory-efficient mode is enabled
-			memoryEfficient, _ := cmd.Flags().GetBool("memory-efficient")
-			
 			// Get batch size for deletion
 			batchSize, _ := cmd.Flags().GetInt("batch-size")
 			if batchSize <= 0 {
-				batchSize = 25 // Default batch size for deletes
+				batchSize = 100 // Default batch size for deletes
 			}
 			
-			// List keys in the namespace
-			verbose, _ := cmd.Flags().GetBool("verbose")
-			if verbose {
-				if tagValue != "" {
-					fmt.Printf("Finding keys with '%s' field value matching '%s' in namespace '%s'...\n", field, tagValue, namespaceID)
-				} else {
-					fmt.Printf("Finding all keys with '%s' field in namespace '%s'...\n", field, namespaceID)
-				}
-			}
-			
-			// Create progress callback
-			progressCallback := func(fetched, total int) {
-				if verbose {
-					if total > 0 {
-						fmt.Printf("Retrieved %d/%d keys so far...\n", fetched, total)
-					} else {
-						fmt.Printf("Retrieved %d keys so far...\n", fetched)
-					}
-				}
-			}
-			
-			// Use ListAllKeys to automatically handle pagination
-			keys, err := kv.ListAllKeys(client, accountID, namespaceID, progressCallback)
-			if err != nil {
-				return fmt.Errorf("failed to list keys: %w", err)
-			}
-			
-			if len(keys) == 0 {
-				fmt.Println("No keys found in the namespace")
-				return nil
-			}
-			
-			if verbose {
-				fmt.Printf("Found %d keys to examine\n", len(keys))
-			}
-			
-			// Create a map to store matching keys and their tag values
-			keysToDelete := []string{}
-			matchedTags := make(map[string]string) // Map of tag value to key
-			
-			// Choose between memory-efficient vs. high performance mode
-			if memoryEfficient {
-				// Memory-efficient mode: Check each key individually
-				for i, key := range keys {
-					if verbose && i%10 == 0 && len(keys) > 20 {
-						fmt.Printf("Checking key %d/%d (%d%%)...\n", i+1, len(keys), (i+1)*100/len(keys))
-					}
-					
-					// Get the value for this key
-					valueStr, err := kv.GetValue(client, accountID, namespaceID, key.Key)
-					if err != nil {
-						fmt.Printf("Warning: failed to get value for key '%s': %v\n", key.Key, err)
-						continue
-					}
-					
-					// Try to parse it as JSON
-					var valueMap map[string]interface{}
-					if err := json.Unmarshal([]byte(valueStr), &valueMap); err != nil {
-						if verbose {
-							fmt.Printf("Key '%s' does not contain valid JSON\n", key.Key)
-						}
-						continue
-					}
-					
-					// Look for the tag field
-					foundTagValue, ok := valueMap[field]
-					if !ok {
-						if verbose {
-							fmt.Printf("Key '%s' does not contain '%s' field\n", key.Key, field)
-						}
-						continue
-					}
-					
-					// Convert tag value to string
-					foundTagStr, ok := foundTagValue.(string)
-					if !ok {
-						if verbose {
-							fmt.Printf("Key '%s' has '%s' field but it's not a string\n", key.Key, field)
-						}
-						continue
-					}
-					
-					// If a specific tag value was provided, check if it matches
-					if tagValue != "" && foundTagStr != tagValue {
-						if verbose {
-							fmt.Printf("Key '%s' has '%s' field with value '%s' (not matching '%s')\n", key.Key, field, foundTagStr, tagValue)
-						}
-						continue
-					}
-					
-					if verbose {
-						fmt.Printf("Key '%s' has '%s' field with value '%s' - MATCH\n", key.Key, field, foundTagStr)
-					}
-					
-					// Store the match
-					matchedTags[foundTagStr] = key.Key
-					keysToDelete = append(keysToDelete, key.Key)
-				}
-			} else {
-				// High-performance mode: Load all values into memory first
-				if verbose {
-					fmt.Println("Loading all values into memory for faster processing...")
-				}
-				
-				// Export with all values (but without metadata to save memory)
-				bulkData, err := kv.ExportKeysAndValuesToJSON(client, accountID, namespaceID, false, progressCallback)
-				if err != nil {
-					return fmt.Errorf("failed to load values: %w", err)
-				}
-				
-				// Process all values in memory
-				for _, item := range bulkData {
-					// Try to parse value as JSON
-					var valueMap map[string]interface{}
-					if err := json.Unmarshal([]byte(item.Value), &valueMap); err != nil {
-						if verbose {
-							fmt.Printf("Key '%s' does not contain valid JSON\n", item.Key)
-						}
-						continue
-					}
-					
-					// Look for the tag field
-					foundTagValue, ok := valueMap[field]
-					if !ok {
-						if verbose {
-							fmt.Printf("Key '%s' does not contain '%s' field\n", item.Key, field)
-						}
-						continue
-					}
-					
-					// Convert tag value to string
-					foundTagStr, ok := foundTagValue.(string)
-					if !ok {
-						if verbose {
-							fmt.Printf("Key '%s' has '%s' field but it's not a string\n", item.Key, field)
-						}
-						continue
-					}
-					
-					// If a specific tag value was provided, check if it matches
-					if tagValue != "" && foundTagStr != tagValue {
-						if verbose {
-							fmt.Printf("Key '%s' has '%s' field with value '%s' (not matching '%s')\n", item.Key, field, foundTagStr, tagValue)
-						}
-						continue
-					}
-					
-					if verbose {
-						fmt.Printf("Key '%s' has '%s' field with value '%s' - MATCH\n", item.Key, field, foundTagStr)
-					}
-					
-					// Store the match
-					matchedTags[foundTagStr] = item.Key
-					keysToDelete = append(keysToDelete, item.Key)
-				}
-			}
-			
-			// Check if we should use batch deletion
-			useBulkDelete, _ := cmd.Flags().GetBool("use-bulk-delete")
-			
-			// If flag to delete is set, delete the keys
+			// Check if this is a dry run
 			dryRun, _ := cmd.Flags().GetBool("dry-run")
-			if len(keysToDelete) > 0 {
-				if dryRun {
-					if tagValue != "" {
-						fmt.Printf("Dry run: Would delete %d keys with '%s' field value matching '%s':\n", len(keysToDelete), field, tagValue)
-					} else {
-						fmt.Printf("Dry run: Would delete %d keys with '%s' field:\n", len(keysToDelete), field)
-					}
-					// Display up to 10 keys to avoid overwhelming output
-					maxDisplay := 10
-					if len(keysToDelete) < maxDisplay {
-						maxDisplay = len(keysToDelete)
+			
+			// Verbose output
+			verbose, _ := cmd.Flags().GetBool("verbose")
+			
+			// Print a message about the deprecated command
+			fmt.Println("NOTE: This command is deprecated. Please use 'purge-by-tag-streaming' for better performance.")
+			
+			// Progress tracking
+			var lastProgressTime time.Time
+			var lastKeysFetched, lastKeysProcessed, lastKeysDeleted int
+			
+			// Create the progress callback
+			progressCallback := func(keysFetched, keysProcessed, keysDeleted, total int) {
+				if !verbose {
+					return
+				}
+				
+				// Only update progress every 0.5 seconds to avoid flooding the terminal
+				now := time.Now()
+				if lastProgressTime.IsZero() || now.Sub(lastProgressTime) > 500*time.Millisecond {
+					if keysFetched > lastKeysFetched {
+						fmt.Printf("Progress: Listed %d keys\n", keysFetched)
+						lastKeysFetched = keysFetched
 					}
 					
-					for i := 0; i < maxDisplay; i++ {
-						fmt.Printf("  - Key: %s\n", keysToDelete[i])
+					if keysProcessed > lastKeysProcessed {
+						fmt.Printf("Progress: Processed %d/%d keys (%d%%)\n", 
+							keysProcessed, total, keysProcessed*100/total)
+						lastKeysProcessed = keysProcessed
 					}
 					
-					if len(keysToDelete) > maxDisplay {
-						fmt.Printf("  ...and %d more keys\n", len(keysToDelete)-maxDisplay)
+					if keysDeleted > lastKeysDeleted {
+						fmt.Printf("Progress: Deleted %d keys\n", keysDeleted)
+						lastKeysDeleted = keysDeleted
 					}
+					
+					lastProgressTime = now
+				}
+			}
+			
+			// Use the streaming implementation which is more efficient
+			concurrency := 10
+			startTime := time.Now()
+			count, err := kv.StreamingPurgeByTag(client, accountID, namespaceID, field, tagValue, 
+				batchSize, concurrency, dryRun, progressCallback)
+			duration := time.Since(startTime)
+			
+			if err != nil {
+				return fmt.Errorf("failed during purge operation: %w", err)
+			}
+			
+			// Output result
+			if dryRun {
+				// In dry run mode, count is the number of matches found
+				if tagValue != "" {
+					fmt.Printf("Dry run: Found %d keys with '%s' field value matching '%s'\n", count, field, tagValue)
 				} else {
-					if tagValue != "" {
-						fmt.Printf("Deleting %d keys with '%s' field value matching '%s'...\n", len(keysToDelete), field, tagValue)
-					} else {
-						fmt.Printf("Deleting %d keys with '%s' field...\n", len(keysToDelete), field)
-					}
-					
-					successCount := 0
-					
-					if useBulkDelete {
-						// Use bulk deletions in batches
-						for i := 0; i < len(keysToDelete); i += batchSize {
-							end := i + batchSize
-							if end > len(keysToDelete) {
-								end = len(keysToDelete)
-							}
-							
-							batch := keysToDelete[i:end]
-							
-							if verbose {
-								fmt.Printf("Deleting batch %d/%d (%d keys)...\n", 
-									(i/batchSize)+1, 
-									(len(keysToDelete)+batchSize-1)/batchSize, 
-									len(batch))
-							}
-							
-							// Delete batch
-							err := kv.DeleteMultipleValues(client, accountID, namespaceID, batch)
-							if err != nil {
-								fmt.Printf("Warning: batch deletion partially failed: %v\n", err)
-							} else {
-								successCount += len(batch)
-							}
-						}
-					} else {
-						// Use individual deletes
-						for i, key := range keysToDelete {
-							if verbose && (i+1) % batchSize == 0 {
-								fmt.Printf("Progress: %d/%d keys deleted (%d%%)...\n", 
-									i+1, len(keysToDelete), (i+1)*100/len(keysToDelete))
-							}
-							
-							// Delete individual key
-							if err := kv.DeleteValue(client, accountID, namespaceID, key); err != nil {
-								fmt.Printf("Warning: failed to delete key '%s': %v\n", key, err)
-							} else {
-								successCount++
-							}
-						}
-					}
-					
-					if verbose && len(keysToDelete) > batchSize {
-						fmt.Printf("Completed: %d/%d keys deleted successfully\n", successCount, len(keysToDelete))
-					}
-					
-					if tagValue != "" {
-						fmt.Printf("Successfully deleted %d keys with '%s' field value matching '%s'\n", successCount, field, tagValue)
-					} else {
-						fmt.Printf("Successfully deleted %d keys with '%s' field\n", successCount, field)
-					}
+					fmt.Printf("Dry run: Found %d keys with '%s' field\n", count, field)
 				}
 			} else {
+				// In actual run mode, count is the number of keys deleted
 				if tagValue != "" {
-					fmt.Printf("No keys found with '%s' field value matching '%s'\n", field, tagValue)
+					fmt.Printf("Successfully deleted %d keys with '%s' field value matching '%s'\n", count, field, tagValue)
 				} else {
-					fmt.Printf("No keys found with '%s' field\n", field)
+					fmt.Printf("Successfully deleted %d keys with '%s' field\n", count, field)
 				}
+			}
+			
+			if verbose {
+				fmt.Printf("Operation completed in %s\n", duration.Round(time.Millisecond))
 			}
 			
 			return nil
@@ -1161,9 +979,12 @@ func createPurgeByTagCmd() *cobra.Command {
 	cmd.Flags().String("field", "cache-tag", "The JSON field to search for in values")
 	cmd.Flags().StringVar(&kvFlagsVars.value, "tag-value", "", "The tag value to match (if empty, all values will be purged)")
 	cmd.Flags().Bool("dry-run", false, "Show what would be deleted without actually deleting")
-	cmd.Flags().Bool("memory-efficient", false, "Process one key at a time instead of loading all values in memory (slower but uses less memory)")
 	cmd.Flags().Bool("use-bulk-delete", true, "Use bulk delete API instead of individual deletes (faster for large operations)")
-	cmd.Flags().Int("batch-size", 10000, "Number of items to delete in each batch (max 10000)")
+	cmd.Flags().Int("batch-size", 100, "Number of items to process in each batch")
+	
+	// Add a deprecated flag for backward compatibility
+	cmd.Flags().Bool("memory-efficient", false, "Deprecated: This flag has no effect, the command now always uses the streaming implementation")
+	cmd.Flags().MarkDeprecated("memory-efficient", "This flag is deprecated and has no effect")
 	
 	return cmd
 }
@@ -1172,8 +993,185 @@ func createPurgeByTagCmd() *cobra.Command {
 func createBulkUploadBatchCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "bulk-batch",
-		Short: "Upload bulk JSON data to a KV namespace using efficient batch operations",
-		Long:  `Upload a JSON file containing an array of key-value pairs to a KV namespace using efficient batch operations.`,
+		Short: "Upload bulk JSON data to a KV namespace (deprecated, use bulk-concurrent instead)",
+		Long:  `Upload a JSON file containing an array of key-value pairs to a KV namespace. This command is deprecated, please use bulk-concurrent instead.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Get account ID from flag, config, or environment variable
+			accountID := kvFlagsVars.accountID
+			if accountID == "" {
+				// Try to get from config or environment variable
+				cfg, err := config.LoadFromFile("")
+				if err == nil {
+					accountID = cfg.GetAccountID()
+				}
+			}
+			
+			if accountID == "" {
+				return fmt.Errorf("account ID is required, specify it with --account-id flag, CLOUDFLARE_ACCOUNT_ID environment variable, or set a default account in config")
+			}
+			
+			// Get namespace ID
+			namespaceID := kvFlagsVars.namespaceID
+			if namespaceID == "" {
+				// If title is provided, try to find namespace by title
+				if kvFlagsVars.title != "" {
+					// Create API client
+					client, err := api.NewClient()
+					if err != nil {
+						return fmt.Errorf("failed to create API client: %w", err)
+					}
+					
+					// Find namespace by title
+					ns, err := kv.FindNamespaceByTitle(client, accountID, kvFlagsVars.title)
+					if err != nil {
+						return fmt.Errorf("failed to find namespace by title: %w", err)
+					}
+					
+					namespaceID = ns.ID
+				} else {
+					return fmt.Errorf("namespace ID or title is required, specify with --namespace-id or --title flag")
+				}
+			}
+			
+			// Check for input file
+			if kvFlagsVars.file == "" {
+				return fmt.Errorf("input file is required, specify with --file flag")
+			}
+			
+			// Print a message about the deprecated command
+			fmt.Println("NOTE: This command is deprecated. Please use 'bulk-concurrent' for better performance.")
+			
+			// Read the input file
+			data, err := os.ReadFile(kvFlagsVars.file)
+			if err != nil {
+				return fmt.Errorf("failed to read input file: %w", err)
+			}
+			
+			// Parse the JSON
+			type KVItem struct {
+				Key           string                 `json:"key"`
+				Value         interface{}            `json:"value"`
+				Metadata      map[string]interface{} `json:"metadata,omitempty"`
+				Expiration    int64                  `json:"expiration,omitempty"`
+				ExpirationTTL int64                  `json:"expiration_ttl,omitempty"`
+			}
+			
+			var items []KVItem
+			if err := json.Unmarshal(data, &items); err != nil {
+				return fmt.Errorf("failed to parse JSON input: %w", err)
+			}
+			
+			if len(items) == 0 {
+				return fmt.Errorf("no items found in input file")
+			}
+			
+			// Create API client
+			client, err := api.NewClient()
+			if err != nil {
+				return fmt.Errorf("failed to create API client: %w", err)
+			}
+			
+			// Convert all items to bulk write items
+			bulkItems := make([]kv.BulkWriteItem, len(items))
+			for i, item := range items {
+				// Convert value to JSON string
+				valueBytes, err := json.Marshal(item.Value)
+				if err != nil {
+					fmt.Printf("Warning: failed to encode value for key '%s': %v\n", item.Key, err)
+					continue
+				}
+				
+				// Calculate expiration if needed
+				expiration := int64(0)
+				if item.Expiration > 0 {
+					expiration = item.Expiration
+				} else if item.ExpirationTTL > 0 {
+					expiration = time.Now().Unix() + item.ExpirationTTL
+				}
+				
+				// Add to bulk items array
+				bulkItems[i] = kv.BulkWriteItem{
+					Key:        item.Key,
+					Value:      string(valueBytes),
+					Expiration: expiration,
+					Metadata:   item.Metadata,
+				}
+			}
+			
+			// Upload using concurrent batches (which is much more efficient)
+			verbose, _ := cmd.Flags().GetBool("verbose")
+			
+			// Create progress callback
+			progressCallback := func(completed, total int) {
+				if verbose && total > 0 {
+					fmt.Printf("Progress: %d/%d items uploaded (%d%%)\n", 
+						completed, total, completed*100/total)
+				}
+			}
+			
+			// Use concurrent batch upload with reasonable defaults
+			batchSize := 100 // Cloudflare's recommended batch size
+			concurrency := 10 // Moderate concurrency
+			
+			startTime := time.Now()
+			successCount, err := kv.WriteMultipleValuesConcurrently(
+				client, 
+				accountID, 
+				namespaceID, 
+				bulkItems,
+				batchSize,
+				concurrency,
+				progressCallback,
+			)
+			duration := time.Since(startTime)
+			
+			if err != nil {
+				fmt.Printf("Warning: some batches failed: %v\n", err)
+			}
+			
+			// Output result
+			fmt.Printf("Successfully uploaded %d/%d items to KV namespace\n", successCount, len(items))
+			
+			if verbose {
+				fmt.Printf("Operation completed in %s\n", duration.Round(time.Millisecond))
+				if successCount > 0 {
+					// Calculate throughput
+					itemsPerSecond := float64(successCount) / duration.Seconds()
+					fmt.Printf("Upload throughput: %.1f items/second\n", itemsPerSecond)
+				}
+			}
+			
+			return nil
+		},
+	}
+	
+	cmd.Flags().StringVar(&kvFlagsVars.namespaceID, "namespace-id", "", "ID of the namespace")
+	cmd.Flags().StringVar(&kvFlagsVars.title, "title", "", "Title of the namespace (alternative to namespace-id)")
+	cmd.Flags().StringVar(&kvFlagsVars.file, "file", "", "JSON file to upload")
+	cmd.MarkFlagRequired("file")
+	
+	return cmd
+}
+
+// createBulkUploadConcurrentCmd creates a command to upload a bulk JSON file with concurrent operations
+func createBulkUploadConcurrentCmd() *cobra.Command {
+	var (
+		batchSize   int
+		concurrency int
+	)
+	
+	cmd := &cobra.Command{
+		Use:   "bulk-concurrent",
+		Short: "Upload bulk JSON data to a KV namespace using concurrent operations (optimized for high rate limits)",
+		Long:  `Upload a JSON file containing an array of key-value pairs to a KV namespace using concurrent batch operations for maximum throughput.`,
+		Example: `  # Upload data with default settings
+  cache-kv-purger kv bulk-concurrent --namespace-id your-namespace-id --file data.json
+  
+  # Upload with high concurrency for faster throughput (with high rate limits)
+  cache-kv-purger kv bulk-concurrent --namespace-id your-namespace-id --file data.json --concurrency 30 --batch-size 100
+  
+  # Upload with smaller batches but higher concurrency
+  cache-kv-purger kv bulk-concurrent --namespace-id your-namespace-id --file data.json --concurrency 50 --batch-size 50`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Get account ID from flag, config, or environment variable
 			accountID := kvFlagsVars.accountID
@@ -1247,80 +1245,95 @@ func createBulkUploadBatchCmd() *cobra.Command {
 				return fmt.Errorf("failed to create API client: %w", err)
 			}
 			
-			// Process in batches
-			batchSize := 100 // Cloudflare's maximum batch size
+			// Get verbosity flag
 			verbose, _ := cmd.Flags().GetBool("verbose")
 			
 			if verbose {
-				fmt.Printf("Uploading %d items to KV namespace '%s' in batches of %d...\n", len(items), namespaceID, batchSize)
+				fmt.Printf("Uploading %d items to KV namespace '%s' using concurrent operations\n", len(items), namespaceID)
+				fmt.Printf("Performance settings: concurrency=%d, batch-size=%d\n", concurrency, batchSize)
+				fmt.Println("Using concurrent upload mode for maximum throughput")
 			}
 			
-			successCount := 0
-			for i := 0; i < len(items); i += batchSize {
-				end := i + batchSize
-				if end > len(items) {
-					end = len(items)
-				}
-				
-				batch := items[i:end]
-				
-				if verbose {
-					fmt.Printf("Processing batch %d/%d (%d items)...\n", 
-						(i/batchSize)+1, 
-						(len(items)+batchSize-1)/batchSize, 
-						len(batch))
-				}
-				
-				// Convert batch to bulk write items
-				bulkItems := make([]kv.BulkWriteItem, len(batch))
-				for j, item := range batch {
-					// Convert value to JSON string
-					valueBytes, err := json.Marshal(item.Value)
-					if err != nil {
-						fmt.Printf("Warning: failed to encode value for key '%s': %v\n", item.Key, err)
-						continue
-					}
-					
-					// Add to bulk items
-					expiration := int64(0)
-					if item.Expiration > 0 {
-						expiration = item.Expiration
-					} else if item.ExpirationTTL > 0 {
-						// Use TTL to calculate expiration
-						expiration = time.Now().Unix() + item.ExpirationTTL
-					}
-					
-					bulkItems[j] = kv.BulkWriteItem{
-						Key:        item.Key,
-						Value:      string(valueBytes),
-						Expiration: expiration,
-						Metadata:   item.Metadata,
-					}
-				}
-				
-				// Write batch
-				err = kv.WriteMultipleValues(client, accountID, namespaceID, bulkItems)
+			// Start the timer to measure performance
+			startTime := time.Now()
+			
+			// Convert all items to bulk write items
+			bulkItems := make([]kv.BulkWriteItem, len(items))
+			for i, item := range items {
+				// Convert value to JSON string
+				valueBytes, err := json.Marshal(item.Value)
 				if err != nil {
-					fmt.Printf("Warning: failed to write batch: %v\n", err)
+					fmt.Printf("Warning: failed to encode value for key '%s': %v\n", item.Key, err)
 					continue
 				}
 				
-				successCount += len(batch)
-				
-				if verbose {
-					fmt.Printf("Successfully uploaded batch %d/%d\n", 
-						(i/batchSize)+1, 
-						(len(items)+batchSize-1)/batchSize)
+				// Calculate expiration if needed
+				expiration := int64(0)
+				if item.Expiration > 0 {
+					expiration = item.Expiration
+				} else if item.ExpirationTTL > 0 {
+					expiration = time.Now().Unix() + item.ExpirationTTL
 				}
+				
+				// Add to bulk items array
+				bulkItems[i] = kv.BulkWriteItem{
+					Key:        item.Key,
+					Value:      string(valueBytes),
+					Expiration: expiration,
+					Metadata:   item.Metadata,
+				}
+			}
+			
+			// Create progress callback
+			progressCallback := func(completed, total int) {
+				if !verbose {
+					return
+				}
+				
+				// Show progress as percentage 
+				fmt.Printf("Progress: %d/%d items uploaded (%d%%)\n", 
+					completed, total, completed*100/total)
+			}
+			
+			// Upload all items using our concurrent function
+			successCount, err := kv.WriteMultipleValuesConcurrently(
+				client, 
+				accountID, 
+				namespaceID, 
+				bulkItems,
+				batchSize,
+				concurrency,
+				progressCallback,
+			)
+			
+			// Calculate elapsed time
+			duration := time.Since(startTime)
+			
+			if err != nil {
+				fmt.Printf("Warning: some batches failed: %v\n", err)
 			}
 			
 			// Output result
 			fmt.Printf("Successfully uploaded %d/%d items to KV namespace\n", successCount, len(items))
 			
+			if verbose {
+				fmt.Printf("Operation completed in %s\n", duration.Round(time.Millisecond))
+				if successCount > 0 {
+					// Calculate throughput
+					itemsPerSecond := float64(successCount) / duration.Seconds()
+					fmt.Printf("Upload throughput: %.1f items/second\n", itemsPerSecond)
+				}
+			}
+			
 			return nil
 		},
 	}
 	
+	// Add flags specific to this command
+	cmd.Flags().IntVar(&batchSize, "batch-size", 100, "Number of items to include in each batch (max 10000)")
+	cmd.Flags().IntVar(&concurrency, "concurrency", 20, "Number of concurrent upload operations (recommend 10-50)")
+	
+	// Add standard flags
 	cmd.Flags().StringVar(&kvFlagsVars.namespaceID, "namespace-id", "", "ID of the namespace")
 	cmd.Flags().StringVar(&kvFlagsVars.title, "title", "", "Title of the namespace (alternative to namespace-id)")
 	cmd.Flags().StringVar(&kvFlagsVars.file, "file", "", "JSON file to upload")
@@ -1445,8 +1458,8 @@ func createTestDataWithMetadataCmd() *cobra.Command {
 func createSimpleUploadCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "simple-upload",
-		Short: "Upload bulk JSON data to a KV namespace (ignoring expiration)",
-		Long:  `Upload a JSON file containing an array of key-value pairs to a KV namespace, ignoring any expiration settings.`,
+		Short: "Upload bulk JSON data to a KV namespace (deprecated, use bulk-concurrent instead)",
+		Long:  `Upload a JSON file containing an array of key-value pairs to a KV namespace. This command is deprecated, please use bulk-concurrent instead.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Get account ID from flag, config, or environment variable
 			accountID := kvFlagsVars.accountID
@@ -1490,6 +1503,9 @@ func createSimpleUploadCmd() *cobra.Command {
 				return fmt.Errorf("input file is required, specify with --file flag")
 			}
 			
+			// Print a message about the deprecated command
+			fmt.Println("NOTE: This command is deprecated. Please use 'bulk-concurrent' for better performance.")
+			
 			// Read the input file
 			data, err := os.ReadFile(kvFlagsVars.file)
 			if err != nil {
@@ -1498,8 +1514,8 @@ func createSimpleUploadCmd() *cobra.Command {
 			
 			// Parse the JSON
 			type KVItem struct {
-				Key         string      `json:"key"`
-				Value       interface{} `json:"value"`
+				Key    string      `json:"key"`
+				Value  interface{} `json:"value"`
 			}
 			
 			var items []KVItem
@@ -1517,18 +1533,9 @@ func createSimpleUploadCmd() *cobra.Command {
 				return fmt.Errorf("failed to create API client: %w", err)
 			}
 			
-			// Upload each item
-			verbose, _ := cmd.Flags().GetBool("verbose")
-			if verbose {
-				fmt.Printf("Uploading %d items to KV namespace '%s'...\n", len(items), namespaceID)
-			}
-			
-			successCount := 0
+			// Convert to bulk write items for batch processing
+			bulkItems := make([]kv.BulkWriteItem, len(items))
 			for i, item := range items {
-				if verbose {
-					fmt.Printf("Uploading item %d/%d: %s\n", i+1, len(items), item.Key)
-				}
-				
 				// Convert value to JSON string
 				valueBytes, err := json.Marshal(item.Value)
 				if err != nil {
@@ -1536,18 +1543,55 @@ func createSimpleUploadCmd() *cobra.Command {
 					continue
 				}
 				
-				// Write the value - no expiration
-				err = kv.WriteValue(client, accountID, namespaceID, item.Key, string(valueBytes), nil)
-				if err != nil {
-					fmt.Printf("Warning: failed to write value for key '%s': %v\n", item.Key, err)
-					continue
+				// Add to bulk items (no expiration)
+				bulkItems[i] = kv.BulkWriteItem{
+					Key:   item.Key,
+					Value: string(valueBytes),
 				}
-				
-				successCount++
+			}
+			
+			// Upload using concurrent batches (which is much more efficient)
+			verbose, _ := cmd.Flags().GetBool("verbose")
+			
+			// Create progress callback
+			progressCallback := func(completed, total int) {
+				if verbose && total > 0 {
+					fmt.Printf("Progress: %d/%d items uploaded (%d%%)\n", 
+						completed, total, completed*100/total)
+				}
+			}
+			
+			// Use concurrent batch upload with reasonable defaults
+			batchSize := 100 // Cloudflare's recommended batch size
+			concurrency := 10 // Moderate concurrency
+			
+			startTime := time.Now()
+			successCount, err := kv.WriteMultipleValuesConcurrently(
+				client, 
+				accountID, 
+				namespaceID, 
+				bulkItems,
+				batchSize,
+				concurrency,
+				progressCallback,
+			)
+			duration := time.Since(startTime)
+			
+			if err != nil {
+				fmt.Printf("Warning: some batches failed: %v\n", err)
 			}
 			
 			// Output result
 			fmt.Printf("Successfully uploaded %d/%d items to KV namespace\n", successCount, len(items))
+			
+			if verbose {
+				fmt.Printf("Operation completed in %s\n", duration.Round(time.Millisecond))
+				if successCount > 0 {
+					// Calculate throughput
+					itemsPerSecond := float64(successCount) / duration.Seconds()
+					fmt.Printf("Upload throughput: %.1f items/second\n", itemsPerSecond)
+				}
+			}
 			
 			return nil
 		},
@@ -1565,8 +1609,8 @@ func createSimpleUploadCmd() *cobra.Command {
 func createBulkUploadCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "bulk-upload",
-		Short: "Upload bulk JSON data to a KV namespace",
-		Long:  `Upload a JSON file containing an array of key-value pairs to a KV namespace.`,
+		Short: "Upload bulk JSON data to a KV namespace (deprecated, use bulk-concurrent instead)",
+		Long:  `Upload a JSON file containing an array of key-value pairs to a KV namespace. This command is deprecated, please use bulk-concurrent for better performance.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Get account ID from flag, config, or environment variable
 			accountID := kvFlagsVars.accountID
@@ -1610,6 +1654,9 @@ func createBulkUploadCmd() *cobra.Command {
 				return fmt.Errorf("input file is required, specify with --file flag")
 			}
 			
+			// Print a message about the deprecated command
+			fmt.Println("NOTE: This command is deprecated. Please use 'bulk-concurrent' for better performance.")
+			
 			// Read the input file
 			data, err := os.ReadFile(kvFlagsVars.file)
 			if err != nil {
@@ -1622,6 +1669,7 @@ func createBulkUploadCmd() *cobra.Command {
 				Value       interface{} `json:"value"`
 				Expiration  int64       `json:"expiration,omitempty"`
 				ExpirationTTL int64     `json:"expiration_ttl,omitempty"`
+				Metadata    map[string]interface{} `json:"metadata,omitempty"`
 			}
 			
 			var items []KVItem
@@ -1639,18 +1687,9 @@ func createBulkUploadCmd() *cobra.Command {
 				return fmt.Errorf("failed to create API client: %w", err)
 			}
 			
-			// Upload each item
-			verbose, _ := cmd.Flags().GetBool("verbose")
-			if verbose {
-				fmt.Printf("Uploading %d items to KV namespace '%s'...\n", len(items), namespaceID)
-			}
-			
-			successCount := 0
+			// Convert to bulk write items for batch processing
+			bulkItems := make([]kv.BulkWriteItem, len(items))
 			for i, item := range items {
-				if verbose {
-					fmt.Printf("Uploading item %d/%d: %s\n", i+1, len(items), item.Key)
-				}
-				
 				// Convert value to JSON string
 				valueBytes, err := json.Marshal(item.Value)
 				if err != nil {
@@ -1658,31 +1697,65 @@ func createBulkUploadCmd() *cobra.Command {
 					continue
 				}
 				
-				// Create options if expiration is set
-				var options *kv.WriteOptions
-				if item.Expiration > 0 || item.ExpirationTTL > 0 {
-					options = &kv.WriteOptions{}
-					
-					if item.Expiration > 0 {
-						options.Expiration = item.Expiration
-					} else if item.ExpirationTTL > 0 {
-						// Calculate expiration from TTL
-						options.Expiration = time.Now().Unix() + item.ExpirationTTL
-					}
+				// Calculate expiration if needed
+				expiration := int64(0)
+				if item.Expiration > 0 {
+					expiration = item.Expiration
+				} else if item.ExpirationTTL > 0 {
+					expiration = time.Now().Unix() + item.ExpirationTTL
 				}
 				
-				// Write the value
-				err = kv.WriteValue(client, accountID, namespaceID, item.Key, string(valueBytes), options)
-				if err != nil {
-					fmt.Printf("Warning: failed to write value for key '%s': %v\n", item.Key, err)
-					continue
+				// Add to bulk items
+				bulkItems[i] = kv.BulkWriteItem{
+					Key:        item.Key,
+					Value:      string(valueBytes),
+					Expiration: expiration,
+					Metadata:   item.Metadata,
 				}
-				
-				successCount++
+			}
+			
+			// Upload using concurrent batches (which is much more efficient)
+			verbose, _ := cmd.Flags().GetBool("verbose")
+			
+			// Create progress callback
+			progressCallback := func(completed, total int) {
+				if verbose && total > 0 {
+					fmt.Printf("Progress: %d/%d items uploaded (%d%%)\n", 
+						completed, total, completed*100/total)
+				}
+			}
+			
+			// Use concurrent batch upload with reasonable defaults
+			batchSize := 100 // Cloudflare's recommended batch size
+			concurrency := 10 // Moderate concurrency
+			
+			startTime := time.Now()
+			successCount, err := kv.WriteMultipleValuesConcurrently(
+				client, 
+				accountID, 
+				namespaceID, 
+				bulkItems,
+				batchSize,
+				concurrency,
+				progressCallback,
+			)
+			duration := time.Since(startTime)
+			
+			if err != nil {
+				fmt.Printf("Warning: some batches failed: %v\n", err)
 			}
 			
 			// Output result
 			fmt.Printf("Successfully uploaded %d/%d items to KV namespace\n", successCount, len(items))
+			
+			if verbose {
+				fmt.Printf("Operation completed in %s\n", duration.Round(time.Millisecond))
+				if successCount > 0 {
+					// Calculate throughput
+					itemsPerSecond := float64(successCount) / duration.Seconds()
+					fmt.Printf("Upload throughput: %.1f items/second\n", itemsPerSecond)
+				}
+			}
 			
 			return nil
 		},
@@ -2826,34 +2899,30 @@ func createTestMetadataCmd() *cobra.Command {
 	return cmd
 }
 
-// createPurgeByMetadataCmd creates a command to purge KV values by metadata field/value
-func createPurgeByMetadataCmd() *cobra.Command {
+// createPurgeByMetadataOnlyCmd creates a command to purge KV values by metadata field/value using only metadata
+func createPurgeByMetadataOnlyCmd() *cobra.Command {
 	var (
 		metadataField string
 		metadataValue string
 		chunkSize     int
 		concurrency   int
-		limit         int
 	)
 
 	cmd := &cobra.Command{
-		Use:   "purge-by-metadata",
-		Short: "Purge KV values by metadata field/value",
-		Long:  `Find and delete KV values with matching metadata field and value.`,
+		Use:   "purge-by-metadata-only",
+		Short: "Purge KV values by metadata field/value (extremely fast)",
+		Long:  `Find and delete KV values with matching metadata field and value using metadata-only approach for maximum performance.`,
 		Example: `  # Purge all entries with a specific metadata field value
-  cache-kv-purger kv purge-by-metadata --namespace-id your-namespace-id --field "type" --value "temporary"
+  cache-kv-purger kv purge-by-metadata-only --namespace-id your-namespace-id --field "cache-tag" --value "blog"
 
   # Purge all entries with any value for a metadata field
-  cache-kv-purger kv purge-by-metadata --namespace-id your-namespace-id --field "expirable"
+  cache-kv-purger kv purge-by-metadata-only --namespace-id your-namespace-id --field "cache-tag"
 
   # Fine-tune performance with chunk size and concurrency
-  cache-kv-purger kv purge-by-metadata --namespace-id your-namespace-id --field "category" --value "test" --chunk-size 200 --concurrency 20
+  cache-kv-purger kv purge-by-metadata-only --namespace-id your-namespace-id --field "cache-tag" --value "api" --chunk-size 1000 --concurrency 50
 
   # Preview what would be deleted without actually deleting
-  cache-kv-purger kv purge-by-metadata --namespace-id your-namespace-id --field "status" --value "draft" --dry-run
-
-  # Process only a limited number of keys
-  cache-kv-purger kv purge-by-metadata --namespace-id your-namespace-id --field "cache-tag" --value "blog" --limit 10`,
+  cache-kv-purger kv purge-by-metadata-only --namespace-id your-namespace-id --field "cache-tag" --value "product" --dry-run`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Get account ID from flag, config, or environment variable
 			accountID := kvFlagsVars.accountID
@@ -2918,7 +2987,8 @@ func createPurgeByMetadataCmd() *cobra.Command {
 					fmt.Println("Running in dry-run mode. No keys will be deleted.")
 				}
 				
-				fmt.Printf("Performance settings: chunk-size=%d, concurrency=%d\n", chunkSize, concurrency)
+				fmt.Printf("Performance settings: chunk-size=%d, concurrency=%d (metadata-only mode for maximum speed)\n", 
+					chunkSize, concurrency)
 			}
 			
 			// Progress tracking
@@ -2959,10 +3029,349 @@ func createPurgeByMetadataCmd() *cobra.Command {
 				}
 			}
 			
-			// Run the deletion
+			// Run the purge using metadata-only approach for maximum performance
 			startTime := time.Now()
-			count, err := kv.DeleteKeysByMetadata(client, accountID, namespaceID, metadataField, metadataValue,
-				chunkSize, dryRun, progressCallback)
+			count, err := kv.PurgeByMetadataOnly(client, accountID, namespaceID, metadataField, metadataValue,
+				chunkSize, concurrency, dryRun, progressCallback)
+			duration := time.Since(startTime)
+			
+			if err != nil {
+				return fmt.Errorf("failed during purge operation: %w", err)
+			}
+			
+			// Output result
+			if dryRun {
+				// In dry run mode, count is the number of matches found
+				if metadataValue != "" {
+					fmt.Printf("Dry run: Found %d keys with metadata field '%s' value matching '%s'\n", 
+						count, metadataField, metadataValue)
+				} else {
+					fmt.Printf("Dry run: Found %d keys with metadata field '%s'\n", 
+						count, metadataField)
+				}
+			} else {
+				// In actual run mode, count is the number of keys deleted
+				if metadataValue != "" {
+					fmt.Printf("Successfully deleted %d keys with metadata field '%s' value matching '%s'\n", 
+						count, metadataField, metadataValue)
+				} else {
+					fmt.Printf("Successfully deleted %d keys with metadata field '%s'\n", 
+						count, metadataField)
+				}
+			}
+			
+			if verbose {
+				fmt.Printf("Operation completed in %s\n", duration.Round(time.Millisecond))
+			}
+			
+			return nil
+		},
+	}
+	
+	cmd.Flags().StringVar(&kvFlagsVars.namespaceID, "namespace-id", "", "ID of the namespace")
+	cmd.Flags().StringVar(&kvFlagsVars.title, "title", "", "Title of the namespace (alternative to namespace-id)")
+	cmd.Flags().StringVar(&metadataField, "field", "cache-tag", "The metadata field to search for")
+	cmd.Flags().StringVar(&metadataValue, "value", "", "The metadata value to match (if empty, any value will match)")
+	cmd.Flags().IntVar(&chunkSize, "chunk-size", 1000, "Number of keys to process in each chunk (affects memory usage)")
+	cmd.Flags().IntVar(&concurrency, "concurrency", 1000, "Number of concurrent workers (max 1000, affects performance)")
+	cmd.Flags().Bool("dry-run", false, "Show what would be deleted without actually deleting")
+	
+	return cmd
+}
+
+// createPurgeByMetadataUpfrontCmd creates a command to purge KV values by metadata using upfront loading approach
+func createPurgeByMetadataUpfrontCmd() *cobra.Command {
+	var (
+		metadataField string
+		metadataValue string
+		concurrency   int
+	)
+
+	cmd := &cobra.Command{
+		Use:   "purge-by-metadata-upfront",
+		Short: "Purge KV values by metadata with upfront loading (for high rate limits)",
+		Long:  `Find and delete KV values with matching metadata by loading all metadata upfront in memory. Optimized for high API rate limits.`,
+		Example: `  # Purge all entries with a specific metadata field value
+  cache-kv-purger kv purge-by-metadata-upfront --namespace-id your-namespace-id --field "cache-tag" --value "blog"
+
+  # Purge all entries with any value for a metadata field
+  cache-kv-purger kv purge-by-metadata-upfront --namespace-id your-namespace-id --field "cache-tag"
+
+  # Fine-tune performance with concurrency
+  cache-kv-purger kv purge-by-metadata-upfront --namespace-id your-namespace-id --field "cache-tag" --concurrency 500
+
+  # Preview what would be deleted without actually deleting
+  cache-kv-purger kv purge-by-metadata-upfront --namespace-id your-namespace-id --field "cache-tag" --value "product" --dry-run`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Get account ID from flag, config, or environment variable
+			accountID := kvFlagsVars.accountID
+			if accountID == "" {
+				// Try to get from config or environment variable
+				cfg, err := config.LoadFromFile("")
+				if err == nil {
+					accountID = cfg.GetAccountID()
+				}
+			}
+			
+			if accountID == "" {
+				return fmt.Errorf("account ID is required, specify it with --account-id flag, CLOUDFLARE_ACCOUNT_ID environment variable, or set a default account in config")
+			}
+			
+			// Get namespace ID
+			namespaceID := kvFlagsVars.namespaceID
+			if namespaceID == "" {
+				// If title is provided, try to find namespace by title
+				if kvFlagsVars.title != "" {
+					// Create API client
+					client, err := api.NewClient()
+					if err != nil {
+						return fmt.Errorf("failed to create API client: %w", err)
+					}
+					
+					// Find namespace by title
+					ns, err := kv.FindNamespaceByTitle(client, accountID, kvFlagsVars.title)
+					if err != nil {
+						return fmt.Errorf("failed to find namespace by title: %w", err)
+					}
+					
+					namespaceID = ns.ID
+				} else {
+					return fmt.Errorf("namespace ID or title is required, specify with --namespace-id or --title flag")
+				}
+			}
+			
+			// Create API client
+			client, err := api.NewClient()
+			if err != nil {
+				return fmt.Errorf("failed to create API client: %w", err)
+			}
+			
+			// Check if dry run
+			dryRun, _ := cmd.Flags().GetBool("dry-run")
+			
+			// Verbose output
+			verbose, _ := cmd.Flags().GetBool("verbose")
+			
+			// Log initial info
+			if verbose {
+				if metadataValue != "" {
+					fmt.Printf("Finding keys with metadata field '%s' value matching '%s' in namespace '%s'...\n", 
+						metadataField, metadataValue, namespaceID)
+				} else {
+					fmt.Printf("Finding all keys with metadata field '%s' in namespace '%s'...\n", 
+						metadataField, namespaceID)
+				}
+				
+				if dryRun {
+					fmt.Println("Running in dry-run mode. No keys will be deleted.")
+				}
+				
+				fmt.Printf("Performance settings: concurrency=%d (upfront loading mode for maximum throughput)\n", concurrency)
+				fmt.Println("This mode loads all metadata upfront before processing - optimal for high API rate limits")
+			}
+			
+			// Progress tracking
+			var lastProgressTime time.Time
+			var lastKeysFetched, lastKeysProcessed, lastKeysMatched, lastKeysDeleted int
+			
+			// Create progress callback
+			progressCallback := func(keysFetched, keysProcessed, keysMatched, keysDeleted, total int) {
+				if !verbose {
+					return
+				}
+				
+				// Only update progress every 0.5 seconds to avoid flooding terminal
+				now := time.Now()
+				if lastProgressTime.IsZero() || now.Sub(lastProgressTime) > 500*time.Millisecond {
+					if keysFetched > lastKeysFetched {
+						fmt.Printf("Progress: Listed %d keys\n", keysFetched)
+						lastKeysFetched = keysFetched
+					}
+					
+					if keysProcessed > lastKeysProcessed {
+						fmt.Printf("Progress: Processed %d/%d keys\n", keysProcessed, total)
+						lastKeysProcessed = keysProcessed
+					}
+					
+					if keysMatched > lastKeysMatched {
+						fmt.Printf("Progress: Found %d matching keys\n", keysMatched)
+						lastKeysMatched = keysMatched
+					}
+					
+					if keysDeleted > lastKeysDeleted {
+						fmt.Printf("Progress: Deleted %d keys\n", keysDeleted)
+						lastKeysDeleted = keysDeleted
+					}
+					
+					lastProgressTime = now
+				}
+			}
+			
+			// Run the purge using upfront loading approach for maximum throughput
+			startTime := time.Now()
+			count, err := kv.PurgeByMetadataUpfront(client, accountID, namespaceID, metadataField, metadataValue,
+				concurrency, dryRun, progressCallback)
+			duration := time.Since(startTime)
+			
+			if err != nil {
+				return fmt.Errorf("failed during purge operation: %w", err)
+			}
+			
+			// Output result
+			if dryRun {
+				// In dry run mode, count is the number of matches found
+				if metadataValue != "" {
+					fmt.Printf("Dry run: Found %d keys with metadata field '%s' value matching '%s'\n", 
+						count, metadataField, metadataValue)
+				} else {
+					fmt.Printf("Dry run: Found %d keys with metadata field '%s'\n", 
+						count, metadataField)
+				}
+			} else {
+				// In actual run mode, count is the number of keys deleted
+				if metadataValue != "" {
+					fmt.Printf("Successfully deleted %d keys with metadata field '%s' value matching '%s'\n", 
+						count, metadataField, metadataValue)
+				} else {
+					fmt.Printf("Successfully deleted %d keys with metadata field '%s'\n", 
+						count, metadataField)
+				}
+			}
+			
+			if verbose {
+				fmt.Printf("Operation completed in %s\n", duration.Round(time.Millisecond))
+			}
+			
+			return nil
+		},
+	}
+	
+	cmd.Flags().StringVar(&kvFlagsVars.namespaceID, "namespace-id", "", "ID of the namespace")
+	cmd.Flags().StringVar(&kvFlagsVars.title, "title", "", "Title of the namespace (alternative to namespace-id)")
+	cmd.Flags().StringVar(&metadataField, "field", "cache-tag", "The metadata field to search for")
+	cmd.Flags().StringVar(&metadataValue, "value", "", "The metadata value to match (if empty, any value will match)")
+	cmd.Flags().IntVar(&concurrency, "concurrency", 500, "Number of concurrent workers (recommend 500-1000 for high rate limits)")
+	cmd.Flags().Bool("dry-run", false, "Show what would be deleted without actually deleting")
+	
+	return cmd
+}
+
+// createPurgeByMetadataCmd creates a command to purge KV values by metadata field/value
+func createPurgeByMetadataCmd() *cobra.Command {
+	var (
+		metadataField string
+		metadataValue string
+		chunkSize     int
+		concurrency   int
+	)
+
+	cmd := &cobra.Command{
+		Use:   "purge-by-metadata",
+		Short: "Purge KV values by metadata field/value (deprecated, use purge-by-metadata-only instead)",
+		Long:  `Find and delete KV values with matching metadata field and value. This command is deprecated, please use purge-by-metadata-only or purge-by-metadata-upfront instead.`,
+		Example: `  # Purge all entries with a specific metadata field value
+  cache-kv-purger kv purge-by-metadata --namespace-id your-namespace-id --field "type" --value "temporary"
+
+  # Purge all entries with any value for a metadata field
+  cache-kv-purger kv purge-by-metadata --namespace-id your-namespace-id --field "expirable"
+
+  # Preview what would be deleted without actually deleting
+  cache-kv-purger kv purge-by-metadata --namespace-id your-namespace-id --field "status" --value "draft" --dry-run`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Get account ID from flag, config, or environment variable
+			accountID := kvFlagsVars.accountID
+			if accountID == "" {
+				// Try to get from config or environment variable
+				cfg, err := config.LoadFromFile("")
+				if err == nil {
+					accountID = cfg.GetAccountID()
+				}
+			}
+			
+			if accountID == "" {
+				return fmt.Errorf("account ID is required, specify it with --account-id flag, CLOUDFLARE_ACCOUNT_ID environment variable, or set a default account in config")
+			}
+			
+			// Get namespace ID
+			namespaceID := kvFlagsVars.namespaceID
+			if namespaceID == "" {
+				// If title is provided, try to find namespace by title
+				if kvFlagsVars.title != "" {
+					// Create API client
+					client, err := api.NewClient()
+					if err != nil {
+						return fmt.Errorf("failed to create API client: %w", err)
+					}
+					
+					// Find namespace by title
+					ns, err := kv.FindNamespaceByTitle(client, accountID, kvFlagsVars.title)
+					if err != nil {
+						return fmt.Errorf("failed to find namespace by title: %w", err)
+					}
+					
+					namespaceID = ns.ID
+				} else {
+					return fmt.Errorf("namespace ID or title is required, specify with --namespace-id or --title flag")
+				}
+			}
+			
+			// Create API client
+			client, err := api.NewClient()
+			if err != nil {
+				return fmt.Errorf("failed to create API client: %w", err)
+			}
+			
+			// Print a message about the deprecated command
+			fmt.Println("NOTE: This command is deprecated. Please use 'purge-by-metadata-only' for better performance with metadata operations.")
+			
+			// Check if dry run
+			dryRun, _ := cmd.Flags().GetBool("dry-run")
+			
+			// Verbose output
+			verbose, _ := cmd.Flags().GetBool("verbose")
+			
+			// Progress tracking
+			var lastProgressTime time.Time
+			var lastKeysFetched, lastKeysProcessed, lastKeysMatched, lastKeysDeleted int
+			
+			// Create progress callback
+			progressCallback := func(keysFetched, keysProcessed, keysMatched, keysDeleted, total int) {
+				if !verbose {
+					return
+				}
+				
+				// Only update progress every 0.5 seconds to avoid flooding terminal
+				now := time.Now()
+				if lastProgressTime.IsZero() || now.Sub(lastProgressTime) > 500*time.Millisecond {
+					if keysFetched > lastKeysFetched {
+						fmt.Printf("Progress: Listed %d keys\n", keysFetched)
+						lastKeysFetched = keysFetched
+					}
+					
+					if keysProcessed > lastKeysProcessed {
+						fmt.Printf("Progress: Processed %d/%d keys (%d%%)\n", 
+							keysProcessed, total, keysProcessed*100/total)
+						lastKeysProcessed = keysProcessed
+					}
+					
+					if keysMatched > lastKeysMatched {
+						fmt.Printf("Progress: Found %d matching keys\n", keysMatched)
+						lastKeysMatched = keysMatched
+					}
+					
+					if keysDeleted > lastKeysDeleted {
+						fmt.Printf("Progress: Deleted %d keys\n", keysDeleted)
+						lastKeysDeleted = keysDeleted
+					}
+					
+					lastProgressTime = now
+				}
+			}
+			
+			// Use metadata-only implementation which is more efficient
+			startTime := time.Now()
+			count, err := kv.PurgeByMetadataOnly(client, accountID, namespaceID, metadataField, metadataValue,
+				chunkSize, concurrency, dryRun, progressCallback)
 			duration := time.Since(startTime)
 			
 			if err != nil {
@@ -3002,10 +3411,13 @@ func createPurgeByMetadataCmd() *cobra.Command {
 	cmd.Flags().StringVar(&kvFlagsVars.title, "title", "", "Title of the namespace (alternative to namespace-id)")
 	cmd.Flags().StringVar(&metadataField, "field", "", "The metadata field to search for")
 	cmd.Flags().StringVar(&metadataValue, "value", "", "The metadata value to match (if empty, any value will match)")
-	cmd.Flags().IntVar(&chunkSize, "chunk-size", 100, "Number of keys to process in each chunk (affects memory usage)")
-	cmd.Flags().IntVar(&concurrency, "concurrency", 10, "Number of concurrent workers (affects performance)")
-	cmd.Flags().IntVar(&limit, "limit", 0, "Limit the number of keys to process (for testing)")
+	cmd.Flags().IntVar(&chunkSize, "chunk-size", 1000, "Number of keys to process in each chunk (affects memory usage)")
+	cmd.Flags().IntVar(&concurrency, "concurrency", 20, "Number of concurrent workers (affects performance)")
 	cmd.Flags().Bool("dry-run", false, "Show what would be deleted without actually deleting")
+	
+	// Add a deprecated flag for backward compatibility
+	cmd.Flags().Int("limit", 0, "Deprecated: This flag has no effect")
+	cmd.Flags().MarkDeprecated("limit", "This flag is deprecated and has no effect")
 	
 	cmd.MarkFlagRequired("field")
 	
@@ -3035,14 +3447,27 @@ func init() {
 	
 	// Add utility commands directly to kvCmd for better discoverability
 	kvCmd.AddCommand(createKeyExistsCmd())
-	kvCmd.AddCommand(createGetKeyWithMetadataCmd())  // Add our new command to get key with metadata
-	kvCmd.AddCommand(createPurgeByTagCmd())
-	kvCmd.AddCommand(createStreamingPurgeByTagCmd()) // Add our new optimized command
-	kvCmd.AddCommand(createPurgeByMetadataCmd())     // Add our new metadata-based purge command
-	kvCmd.AddCommand(createTestMetadataCmd())        // Add our simplified test command
-	kvCmd.AddCommand(createBulkUploadCmd())
-	kvCmd.AddCommand(createSimpleUploadCmd())
-	kvCmd.AddCommand(createBulkUploadBatchCmd())
+	kvCmd.AddCommand(createGetKeyWithMetadataCmd())
+	
+	// Add core purge commands (newer, optimized versions first)
+	kvCmd.AddCommand(createPurgeByMetadataUpfrontCmd()) // Recommended for high rate limits
+	kvCmd.AddCommand(createPurgeByMetadataOnlyCmd())    // Best for metadata-based purging
+	kvCmd.AddCommand(createStreamingPurgeByTagCmd())    // Best for tag-based purging
+	
+	// Add legacy purge commands (marked as deprecated)
+	kvCmd.AddCommand(createPurgeByTagCmd())             // Legacy, uses streaming now
+	kvCmd.AddCommand(createPurgeByMetadataCmd())        // Legacy, uses metadata-only implementation
+	kvCmd.AddCommand(createTestMetadataCmd())           // Test utility
+	
+	// Add upload commands (newer, optimized versions first)
+	kvCmd.AddCommand(createBulkUploadConcurrentCmd())   // Recommended bulk uploader
+	
+	// Add legacy upload commands (marked as deprecated)
+	kvCmd.AddCommand(createBulkUploadCmd())             // Legacy, uses concurrent now
+	kvCmd.AddCommand(createSimpleUploadCmd())           // Legacy, uses concurrent now
+	kvCmd.AddCommand(createBulkUploadBatchCmd())        // Legacy, uses concurrent now
+	
+	// Add utility commands
 	kvCmd.AddCommand(createExportNamespaceCmd())
 	kvCmd.AddCommand(createSearchValuesCmd())
 	kvCmd.AddCommand(createTestDataWithMetadataCmd())
