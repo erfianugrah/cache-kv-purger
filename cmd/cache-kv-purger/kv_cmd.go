@@ -1225,10 +1225,11 @@ func createBulkUploadBatchCmd() *cobra.Command {
 			
 			// Parse the JSON
 			type KVItem struct {
-				Key         string      `json:"key"`
-				Value       interface{} `json:"value"`
-				Expiration  int64       `json:"expiration,omitempty"`
-				ExpirationTTL int64     `json:"expiration_ttl,omitempty"`
+				Key           string                 `json:"key"`
+				Value         interface{}            `json:"value"`
+				Metadata      map[string]interface{} `json:"metadata,omitempty"`
+				Expiration    int64                  `json:"expiration,omitempty"`
+				ExpirationTTL int64                  `json:"expiration_ttl,omitempty"`
 			}
 			
 			var items []KVItem
@@ -1282,7 +1283,9 @@ func createBulkUploadBatchCmd() *cobra.Command {
 					
 					// Add to bulk items
 					expiration := int64(0)
-					if item.ExpirationTTL > 0 {
+					if item.Expiration > 0 {
+						expiration = item.Expiration
+					} else if item.ExpirationTTL > 0 {
 						// Use TTL to calculate expiration
 						expiration = time.Now().Unix() + item.ExpirationTTL
 					}
@@ -1291,6 +1294,7 @@ func createBulkUploadBatchCmd() *cobra.Command {
 						Key:        item.Key,
 						Value:      string(valueBytes),
 						Expiration: expiration,
+						Metadata:   item.Metadata,
 					}
 				}
 				
@@ -1321,6 +1325,118 @@ func createBulkUploadBatchCmd() *cobra.Command {
 	cmd.Flags().StringVar(&kvFlagsVars.title, "title", "", "Title of the namespace (alternative to namespace-id)")
 	cmd.Flags().StringVar(&kvFlagsVars.file, "file", "", "JSON file to upload")
 	cmd.MarkFlagRequired("file")
+	
+	return cmd
+}
+
+// createTestDataWithMetadataCmd creates a command to generate test data with metadata
+func createTestDataWithMetadataCmd() *cobra.Command {
+	var (
+		numItems    int
+		outputFile  string
+		metadataKey string
+		tagValues   []string
+	)
+
+	cmd := &cobra.Command{
+		Use:   "generate-test-data",
+		Short: "Generate test data with metadata tags",
+		Long:  `Generate a JSON file with test data including metadata tags for testing the metadata purge functionality.`,
+		Example: `  # Generate 1000 test items with random metadata tags
+  cache-kv-purger kv generate-test-data --count 1000 --output test-data.json --tag-field cache-tag --tag-values product,blog,homepage,api
+
+  # Generate test data with specific tag values
+  cache-kv-purger kv generate-test-data --count 500 --output test-metadata.json --tag-field status --tag-values draft,published,archived`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if numItems <= 0 {
+				return fmt.Errorf("count must be greater than 0")
+			}
+			
+			if outputFile == "" {
+				return fmt.Errorf("output file is required")
+			}
+			
+			if metadataKey == "" {
+				return fmt.Errorf("tag field name is required")
+			}
+			
+			if len(tagValues) == 0 {
+				return fmt.Errorf("at least one tag value is required")
+			}
+			
+			// Generate test data
+			type TestItem struct {
+				Key      string                 `json:"key"`
+				Value    map[string]interface{} `json:"value"`
+				Metadata map[string]interface{} `json:"metadata"`
+			}
+			
+			testData := make([]TestItem, numItems)
+			
+			for i := 0; i < numItems; i++ {
+				// Select a random tag value
+				tagValue := tagValues[i%len(tagValues)]
+				
+				// Generate a UUID-like key to ensure uniqueness
+				timeComponent := fmt.Sprintf("%d", time.Now().UnixNano())
+				randomComponent := fmt.Sprintf("%d", i)
+				key := fmt.Sprintf("test-key-%s-%s", timeComponent, randomComponent)
+				
+				// Create item
+				testData[i] = TestItem{
+					Key: key,
+					Value: map[string]interface{}{
+						"message": fmt.Sprintf("This is test item %d", i+1),
+						"index":   i,
+						"time":    time.Now().Format(time.RFC3339),
+					},
+					Metadata: map[string]interface{}{
+						metadataKey: tagValue,
+						"generated": time.Now().Unix(),
+						"test":      true,
+					},
+				}
+			}
+			
+			// Count tags
+			tagCounts := make(map[string]int)
+			for _, item := range testData {
+				tagValue := item.Metadata[metadataKey].(string)
+				tagCounts[tagValue]++
+			}
+			
+			// Convert to JSON
+			jsonData, err := json.MarshalIndent(testData, "", "  ")
+			if err != nil {
+				return fmt.Errorf("failed to convert to JSON: %w", err)
+			}
+			
+			// Write to file
+			err = os.WriteFile(outputFile, jsonData, 0644)
+			if err != nil {
+				return fmt.Errorf("failed to write to file: %w", err)
+			}
+			
+			// Show summary
+			fmt.Printf("Generated %d test items with metadata and saved to %s\n", numItems, outputFile)
+			fmt.Println("Tag distribution:")
+			for tag, count := range tagCounts {
+				fmt.Printf("  - %s: %d items (%.1f%%)\n", tag, count, float64(count)/float64(numItems)*100)
+			}
+			
+			fmt.Println("\nYou can now upload this data with:")
+			fmt.Printf("  cache-kv-purger kv bulk-batch --namespace-id <your-namespace-id> --file %s\n", outputFile)
+			fmt.Println("\nAnd then test purging by metadata with:")
+			fmt.Printf("  cache-kv-purger kv purge-by-metadata --namespace-id <your-namespace-id> --field %s --value <tag-value>\n", metadataKey)
+			
+			return nil
+		},
+	}
+	
+	cmd.Flags().IntVar(&numItems, "count", 100, "Number of test items to generate")
+	cmd.Flags().StringVar(&outputFile, "output", "test-data.json", "Output file path")
+	cmd.Flags().StringVar(&metadataKey, "tag-field", "cache-tag", "Metadata field name to use for tags")
+	cmd.Flags().StringSliceVar(&tagValues, "tag-values", []string{"product", "blog", "homepage", "api"}, "Possible tag values (comma-separated)")
 	
 	return cmd
 }
@@ -1701,6 +1817,107 @@ func createExportNamespaceCmd() *cobra.Command {
 }
 
 // createKeyExistsCmd creates a command to check if a key exists in a KV namespace
+func createGetKeyWithMetadataCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:                   "get-with-metadata",
+		Short:                 "Get a key including its metadata",
+		Long:                  `Get a key's value and metadata from a KV namespace.`,
+		DisableFlagsInUseLine: false,
+		Example:               `  # Get a key with metadata using namespace ID
+  cache-kv-purger kv get-with-metadata --namespace-id your-namespace-id --key mykey`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Get account ID from flag, config, or environment variable
+			accountID := kvFlagsVars.accountID
+			if accountID == "" {
+				// Try to get from config or environment variable
+				cfg, err := config.LoadFromFile("")
+				if err == nil {
+					accountID = cfg.GetAccountID()
+				}
+			}
+			
+			if accountID == "" {
+				return fmt.Errorf("account ID is required, specify it with --account-id flag, CLOUDFLARE_ACCOUNT_ID environment variable, or set a default account in config")
+			}
+			
+			// Get namespace ID
+			namespaceID := kvFlagsVars.namespaceID
+			if namespaceID == "" {
+				// If title is provided, try to find namespace by title
+				if kvFlagsVars.title != "" {
+					// Create API client
+					client, err := api.NewClient()
+					if err != nil {
+						return fmt.Errorf("failed to create API client: %w", err)
+					}
+					
+					// Find namespace by title
+					ns, err := kv.FindNamespaceByTitle(client, accountID, kvFlagsVars.title)
+					if err != nil {
+						return fmt.Errorf("failed to find namespace by title: %w", err)
+					}
+					
+					namespaceID = ns.ID
+				} else {
+					return fmt.Errorf("namespace ID or title is required, specify with --namespace-id or --title flag")
+				}
+			}
+			
+			// Get key
+			if kvFlagsVars.key == "" {
+				return fmt.Errorf("key is required, specify with --key flag")
+			}
+			
+			// Create API client
+			client, err := api.NewClient()
+			if err != nil {
+				return fmt.Errorf("failed to create API client: %w", err)
+			}
+			
+			// Get key with metadata
+			verbose, _ := cmd.Flags().GetBool("verbose")
+			if verbose {
+				fmt.Printf("Getting key '%s' with metadata from namespace '%s'...\n", kvFlagsVars.key, namespaceID)
+			}
+			
+			kvPair, err := kv.GetKeyWithMetadata(client, accountID, namespaceID, kvFlagsVars.key)
+			if err != nil {
+				return fmt.Errorf("failed to get key with metadata: %w", err)
+			}
+			
+			// Output result
+			fmt.Printf("Key: %s\n", kvPair.Key)
+			fmt.Printf("Value: %s\n", kvPair.Value)
+			
+			if kvPair.Expiration > 0 {
+				expirationTime := time.Unix(kvPair.Expiration, 0)
+				fmt.Printf("Expiration: %s (%d)\n", expirationTime.Format(time.RFC3339), kvPair.Expiration)
+			}
+			
+			if kvPair.Metadata != nil && len(*kvPair.Metadata) > 0 {
+				fmt.Println("Metadata:")
+				metadataJSON, err := json.MarshalIndent(kvPair.Metadata, "  ", "  ")
+				if err != nil {
+					fmt.Printf("  Error formatting metadata: %v\n", err)
+				} else {
+					fmt.Printf("  %s\n", string(metadataJSON))
+				}
+			} else {
+				fmt.Println("No metadata found")
+			}
+			
+			return nil
+		},
+	}
+	
+	cmd.Flags().StringVar(&kvFlagsVars.namespaceID, "namespace-id", "", "ID of the namespace")
+	cmd.Flags().StringVar(&kvFlagsVars.title, "title", "", "Title of the namespace (alternative to namespace-id)")
+	cmd.Flags().StringVar(&kvFlagsVars.key, "key", "", "Key to get")
+	cmd.MarkFlagRequired("key")
+	
+	return cmd
+}
+
 func createKeyExistsCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:                   "exists",
@@ -2113,6 +2330,688 @@ func matchesPattern(str, pattern string) (bool, error) {
 	return regex.MatchString(str), nil
 }
 
+// createNamespaceBulkDeleteCmd creates a command to delete multiple KV namespaces
+func createNamespaceBulkDeleteCmd() *cobra.Command {
+	// Define variables for flags
+	var (
+		namespacePattern string
+		namespaceIDs     []string
+	)
+
+	cmd := &cobra.Command{
+		Use:   "bulk-delete",
+		Short: "Delete multiple KV namespaces",
+		Long:  `Delete multiple KV namespaces from an account, by ID or pattern matching.`,
+		Example: `  # Delete multiple namespaces by their IDs
+  cache-kv-purger kv namespace bulk-delete --account-id YOUR_ACCOUNT_ID --namespace-ids id1,id2,id3
+
+  # Delete all namespaces matching a pattern
+  cache-kv-purger kv namespace bulk-delete --account-id YOUR_ACCOUNT_ID --pattern "test-*"
+
+  # Dry-run to preview which namespaces would be deleted
+  cache-kv-purger kv namespace bulk-delete --account-id YOUR_ACCOUNT_ID --pattern "dev-*" --dry-run`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Get account ID from flag, config, or environment variable
+			accountID := kvFlagsVars.accountID
+			if accountID == "" {
+				// Try to get from config or environment variable
+				cfg, err := config.LoadFromFile("")
+				if err == nil {
+					accountID = cfg.GetAccountID()
+				}
+			}
+			
+			if accountID == "" {
+				return fmt.Errorf("account ID is required, specify it with --account-id flag, CLOUDFLARE_ACCOUNT_ID environment variable, or set a default account in config")
+			}
+			
+			// Create API client
+			client, err := api.NewClient()
+			if err != nil {
+				return fmt.Errorf("failed to create API client: %w", err)
+			}
+			
+			verbose, _ := cmd.Flags().GetBool("verbose")
+			dryRun, _ := cmd.Flags().GetBool("dry-run")
+			
+			// Get list of namespaces to delete
+			var namespacesToDelete []kv.Namespace
+			
+			// Case 1: Delete by pattern
+			if namespacePattern != "" {
+				if verbose {
+					fmt.Printf("Finding namespaces matching pattern '%s'...\n", namespacePattern)
+				}
+				
+				matchingNamespaces, err := kv.FindNamespacesByPattern(client, accountID, namespacePattern)
+				if err != nil {
+					return fmt.Errorf("failed to find namespaces by pattern: %w", err)
+				}
+				
+				if len(matchingNamespaces) == 0 {
+					fmt.Printf("No namespaces found matching pattern '%s'\n", namespacePattern)
+					return nil
+				}
+				
+				namespacesToDelete = matchingNamespaces
+			} else if len(namespaceIDs) > 0 {
+				// Case 2: Delete by IDs provided
+				if verbose {
+					fmt.Printf("Preparing to delete %d namespaces by ID...\n", len(namespaceIDs))
+				}
+				
+				// Verify each namespace exists
+				for _, nsID := range namespaceIDs {
+					ns, err := kv.GetNamespace(client, accountID, nsID)
+					if err != nil {
+						fmt.Printf("Warning: namespace with ID '%s' not found or cannot be accessed: %v\n", nsID, err)
+						continue
+					}
+					
+					namespacesToDelete = append(namespacesToDelete, *ns)
+				}
+				
+				if len(namespacesToDelete) == 0 {
+					fmt.Println("No valid namespaces found from provided IDs")
+					return nil
+				}
+			} else {
+				return fmt.Errorf("either namespace IDs or a pattern must be provided")
+			}
+			
+			// Display namespaces to be deleted
+			fmt.Printf("Found %d namespaces to delete:\n", len(namespacesToDelete))
+			for i, ns := range namespacesToDelete {
+				fmt.Printf("%d. %s (ID: %s)\n", i+1, ns.Title, ns.ID)
+			}
+			
+			// If dry run, exit here
+			if dryRun {
+				fmt.Println("\nDRY RUN: No namespaces were actually deleted")
+				return nil
+			}
+			
+			// Confirm deletion if not forced
+			force, _ := cmd.Flags().GetBool("force")
+			if !force {
+				fmt.Print("\nAre you sure you want to delete these namespaces? This action cannot be undone. [y/N]: ")
+				var confirm string
+				fmt.Scanln(&confirm)
+				
+				if confirm != "y" && confirm != "Y" {
+					fmt.Println("Operation cancelled")
+					return nil
+				}
+			}
+			
+			// Extract namespace IDs
+			deleteIDs := make([]string, len(namespacesToDelete))
+			for i, ns := range namespacesToDelete {
+				deleteIDs[i] = ns.ID
+			}
+			
+			// Delete namespaces with progress feedback
+			progressCallback := func(completed, total, success, failed int) {
+				if verbose {
+					fmt.Printf("Progress: %d/%d completed (%d successful, %d failed)\n", 
+						completed, total, success, failed)
+				}
+			}
+			
+			successIDs, errors := kv.DeleteMultipleNamespacesWithProgress(client, accountID, deleteIDs, progressCallback)
+			
+			// Report results
+			if len(successIDs) > 0 {
+				fmt.Printf("Successfully deleted %d/%d namespaces\n", len(successIDs), len(namespacesToDelete))
+			}
+			
+			if len(errors) > 0 {
+				fmt.Printf("Failed to delete %d namespaces:\n", len(errors))
+				for i, err := range errors {
+					fmt.Printf("%d. %v\n", i+1, err)
+				}
+				return fmt.Errorf("some namespace deletions failed")
+			}
+			
+			return nil
+		},
+	}
+	
+	cmd.Flags().StringVar(&namespacePattern, "pattern", "", "Pattern to match namespace titles (regex syntax)")
+	cmd.Flags().StringSliceVar(&namespaceIDs, "namespace-ids", nil, "Comma-separated list of namespace IDs to delete")
+	cmd.Flags().Bool("dry-run", false, "Show namespaces that would be deleted without actually deleting them")
+	cmd.Flags().Bool("force", false, "Skip confirmation prompt")
+	
+	return cmd
+}
+
+// createStreamingPurgeByTagCmd creates a command to purge KV values by cache-tag using streaming approach
+func createStreamingPurgeByTagCmd() *cobra.Command {
+	var (
+		tagField    string
+		chunkSize   int
+		concurrency int
+	)
+
+	cmd := &cobra.Command{
+		Use:   "purge-by-tag-streaming",
+		Short: "Purge KV values by cache-tag using streaming (optimized for large namespaces)",
+		Long:  `Find and delete KV values with matching cache-tag field value using a streaming approach that is much more efficient for large namespaces.`,
+		Example: `  # Purge all entries with a specific cache-tag value
+  cache-kv-purger kv purge-by-tag-streaming --namespace-id your-namespace-id --tag-value "homepage"
+
+  # Purge all entries with any cache-tag value
+  cache-kv-purger kv purge-by-tag-streaming --namespace-id your-namespace-id
+
+  # Fine-tune performance with chunk size and concurrency
+  cache-kv-purger kv purge-by-tag-streaming --namespace-id your-namespace-id --tag-value "api" --chunk-size 200 --concurrency 20
+
+  # Preview what would be deleted without actually deleting
+  cache-kv-purger kv purge-by-tag-streaming --namespace-id your-namespace-id --tag-value "product" --dry-run`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Get account ID from flag, config, or environment variable
+			accountID := kvFlagsVars.accountID
+			if accountID == "" {
+				// Try to get from config or environment variable
+				cfg, err := config.LoadFromFile("")
+				if err == nil {
+					accountID = cfg.GetAccountID()
+				}
+			}
+			
+			if accountID == "" {
+				return fmt.Errorf("account ID is required, specify it with --account-id flag, CLOUDFLARE_ACCOUNT_ID environment variable, or set a default account in config")
+			}
+			
+			// Get namespace ID
+			namespaceID := kvFlagsVars.namespaceID
+			if namespaceID == "" {
+				// If title is provided, try to find namespace by title
+				if kvFlagsVars.title != "" {
+					// Create API client
+					client, err := api.NewClient()
+					if err != nil {
+						return fmt.Errorf("failed to create API client: %w", err)
+					}
+					
+					// Find namespace by title
+					ns, err := kv.FindNamespaceByTitle(client, accountID, kvFlagsVars.title)
+					if err != nil {
+						return fmt.Errorf("failed to find namespace by title: %w", err)
+					}
+					
+					namespaceID = ns.ID
+				} else {
+					return fmt.Errorf("namespace ID or title is required, specify with --namespace-id or --title flag")
+				}
+			}
+			
+			// Create API client
+			client, err := api.NewClient()
+			if err != nil {
+				return fmt.Errorf("failed to create API client: %w", err)
+			}
+			
+			// Get the tag field name to search for
+			if tagField == "" {
+				// Default to "cache-tag" if not specified
+				tagField = "cache-tag"
+			}
+			
+			// Get the tag value to match
+			tagValue := kvFlagsVars.value
+			
+			// Check if this is a dry run
+			dryRun, _ := cmd.Flags().GetBool("dry-run")
+			
+			// Verbose output
+			verbose, _ := cmd.Flags().GetBool("verbose")
+			
+			// Log initial info
+			if verbose {
+				if tagValue != "" {
+					fmt.Printf("Finding keys with '%s' field value matching '%s' in namespace '%s'...\n", tagField, tagValue, namespaceID)
+				} else {
+					fmt.Printf("Finding all keys with '%s' field in namespace '%s'...\n", tagField, namespaceID)
+				}
+				
+				if dryRun {
+					fmt.Println("Running in dry-run mode. No keys will be deleted.")
+				}
+				
+				fmt.Printf("Performance settings: chunk-size=%d, concurrency=%d\n", chunkSize, concurrency)
+			}
+			
+			// Progress bar variables for display
+			var lastProgressTime time.Time
+			var lastKeysFetched, lastKeysProcessed, lastKeysDeleted int
+			
+			// Create the progress callback
+			progressCallback := func(keysFetched, keysProcessed, keysDeleted, total int) {
+				if !verbose {
+					return
+				}
+				
+				// Only update progress every 0.5 seconds to avoid flooding the terminal
+				now := time.Now()
+				if lastProgressTime.IsZero() || now.Sub(lastProgressTime) > 500*time.Millisecond {
+					if keysFetched > lastKeysFetched {
+						fmt.Printf("Progress: Listed %d keys\n", keysFetched)
+						lastKeysFetched = keysFetched
+					}
+					
+					if keysProcessed > lastKeysProcessed {
+						fmt.Printf("Progress: Processed %d/%d keys (%d%%)\n", 
+							keysProcessed, total, keysProcessed*100/total)
+						lastKeysProcessed = keysProcessed
+					}
+					
+					if keysDeleted > lastKeysDeleted {
+						fmt.Printf("Progress: Deleted %d keys\n", keysDeleted)
+						lastKeysDeleted = keysDeleted
+					}
+					
+					lastProgressTime = now
+				}
+			}
+			
+			// Run the streaming purge
+			startTime := time.Now()
+			count, err := kv.StreamingPurgeByTag(client, accountID, namespaceID, tagField, tagValue, 
+				chunkSize, concurrency, dryRun, progressCallback)
+			duration := time.Since(startTime)
+			
+			if err != nil {
+				return fmt.Errorf("failed during purge operation: %w", err)
+			}
+			
+			// Output result
+			if dryRun {
+				// In dry run mode, count is the number of matches found
+				if tagValue != "" {
+					fmt.Printf("Dry run: Found %d keys with '%s' field value matching '%s'\n", count, tagField, tagValue)
+				} else {
+					fmt.Printf("Dry run: Found %d keys with '%s' field\n", count, tagField)
+				}
+			} else {
+				// In actual run mode, count is the number of keys deleted
+				if tagValue != "" {
+					fmt.Printf("Successfully deleted %d keys with '%s' field value matching '%s'\n", count, tagField, tagValue)
+				} else {
+					fmt.Printf("Successfully deleted %d keys with '%s' field\n", count, tagField)
+				}
+			}
+			
+			if verbose {
+				fmt.Printf("Operation completed in %s\n", duration.Round(time.Millisecond))
+			}
+			
+			return nil
+		},
+	}
+	
+	cmd.Flags().StringVar(&kvFlagsVars.namespaceID, "namespace-id", "", "ID of the namespace")
+	cmd.Flags().StringVar(&kvFlagsVars.title, "title", "", "Title of the namespace (alternative to namespace-id)")
+	cmd.Flags().StringVar(&tagField, "field", "cache-tag", "The JSON field to search for in values")
+	cmd.Flags().StringVar(&kvFlagsVars.value, "tag-value", "", "The tag value to match (if empty, all values will be purged)")
+	cmd.Flags().IntVar(&chunkSize, "chunk-size", 100, "Number of keys to process in each chunk (affects memory usage)")
+	cmd.Flags().IntVar(&concurrency, "concurrency", 10, "Number of concurrent workers (affects performance)")
+	cmd.Flags().Bool("dry-run", false, "Show what would be deleted without actually deleting")
+	
+	return cmd
+}
+
+// createTestMetadataCmd creates a simplified command to test metadata features
+func createTestMetadataCmd() *cobra.Command {
+	var (
+		metadataField string
+		metadataValue string
+		limit         int
+	)
+
+	cmd := &cobra.Command{
+		Use:   "test-metadata",
+		Short: "Test metadata functionality on a small set of keys",
+		Long:  `Test metadata functionality by fetching and optionally deleting a small set of keys with specific metadata.`,
+		Example: `  # Test metadata functionality
+  cache-kv-purger kv test-metadata --namespace-id your-namespace-id --field cache-tag --value blog --limit 10 --dry-run`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Get account ID and namespace ID
+			accountID := kvFlagsVars.accountID
+			if accountID == "" {
+				cfg, err := config.LoadFromFile("")
+				if err == nil {
+					accountID = cfg.GetAccountID()
+				}
+			}
+			
+			if accountID == "" {
+				return fmt.Errorf("account ID is required")
+			}
+			
+			namespaceID := kvFlagsVars.namespaceID
+			if namespaceID == "" {
+				if kvFlagsVars.title != "" {
+					client, err := api.NewClient()
+					if err != nil {
+						return fmt.Errorf("failed to create API client: %w", err)
+					}
+					
+					ns, err := kv.FindNamespaceByTitle(client, accountID, kvFlagsVars.title)
+					if err != nil {
+						return fmt.Errorf("failed to find namespace by title: %w", err)
+					}
+					
+					namespaceID = ns.ID
+				} else {
+					return fmt.Errorf("namespace ID or title is required")
+				}
+			}
+			
+			// Create API client
+			client, err := api.NewClient()
+			if err != nil {
+				return fmt.Errorf("failed to create API client: %w", err)
+			}
+			
+			// Check if we should actually delete
+			dryRun, _ := cmd.Flags().GetBool("dry-run")
+			
+			// Get verbose flag
+			verbose, _ := cmd.Flags().GetBool("verbose")
+			
+			// List keys
+			fmt.Println("Listing keys...")
+			keys, err := kv.ListKeys(client, accountID, namespaceID)
+			if err != nil {
+				return fmt.Errorf("failed to list keys: %w", err)
+			}
+			
+			fmt.Printf("Found %d keys in namespace\n", len(keys))
+			
+			// Get a small sample of keys
+			sampleSize := limit
+			if sampleSize <= 0 {
+				sampleSize = 10 // Default to 10 keys
+			}
+			if sampleSize > len(keys) {
+				sampleSize = len(keys)
+			}
+			
+			fmt.Printf("Checking %d keys for metadata field '%s'", sampleSize, metadataField)
+			if metadataValue != "" {
+				fmt.Printf(" = '%s'", metadataValue)
+			}
+			fmt.Println()
+			
+			// Check each key for metadata
+			var matchingKeys []string
+			
+			for i, key := range keys[:sampleSize] {
+				if verbose {
+					fmt.Printf("Checking key %d/%d: %s\n", i+1, sampleSize, key.Key)
+				}
+				
+				// Get key with metadata using our function
+				keyWithMeta, err := kv.GetKeyWithMetadata(client, accountID, namespaceID, key.Key)
+				if err != nil {
+					fmt.Printf("Error fetching key %s: %v\n", key.Key, err)
+					continue
+				}
+				
+				// Check if the key has metadata
+				if keyWithMeta.Metadata == nil {
+					fmt.Printf("Key '%s' has no metadata\n", key.Key)
+					continue
+				}
+				
+				// Print available metadata fields (in verbose mode)
+				if verbose {
+					fmt.Printf("Key '%s' metadata fields: ", key.Key)
+					for field := range *keyWithMeta.Metadata {
+						fmt.Printf("%s ", field)
+					}
+					fmt.Println()
+				}
+				
+				// Check for specific field
+				metadataMap := *keyWithMeta.Metadata
+				fieldValue, exists := metadataMap[metadataField]
+				if !exists {
+					if verbose {
+						fmt.Printf("Key '%s' does not have metadata field '%s'\n", key.Key, metadataField)
+					}
+					continue
+				}
+				
+				// Check value if provided
+				if metadataValue == "" || fmt.Sprintf("%v", fieldValue) == metadataValue {
+					matchingKeys = append(matchingKeys, key.Key)
+					fmt.Printf("Match found: key '%s' has %s = %v\n", key.Key, metadataField, fieldValue)
+				}
+			}
+			
+			// Show what we found
+			fmt.Printf("\nFound %d matching keys with metadata field '%s'", 
+				len(matchingKeys), metadataField)
+			if metadataValue != "" {
+				fmt.Printf(" = '%s'", metadataValue)
+			}
+			fmt.Println()
+			
+			// If dry run, we're done
+			if dryRun || len(matchingKeys) == 0 {
+				return nil
+			}
+			
+			// Delete matching keys
+			fmt.Printf("Deleting %d matching keys...\n", len(matchingKeys))
+			err = kv.DeleteMultipleValues(client, accountID, namespaceID, matchingKeys)
+			if err != nil {
+				return fmt.Errorf("failed to delete keys: %w", err)
+			}
+			fmt.Printf("Successfully deleted %d keys\n", len(matchingKeys))
+			
+			return nil
+		},
+	}
+	
+	cmd.Flags().StringVar(&kvFlagsVars.namespaceID, "namespace-id", "", "ID of the namespace")
+	cmd.Flags().StringVar(&kvFlagsVars.title, "title", "", "Title of the namespace (alternative to namespace-id)")
+	cmd.Flags().StringVar(&metadataField, "field", "cache-tag", "The metadata field to search for")
+	cmd.Flags().StringVar(&metadataValue, "value", "", "The metadata value to match (if empty, any value will match)")
+	cmd.Flags().IntVar(&limit, "limit", 10, "Limit the number of keys to process")
+	cmd.Flags().Bool("dry-run", false, "Show what would be deleted without actually deleting")
+	
+	return cmd
+}
+
+// createPurgeByMetadataCmd creates a command to purge KV values by metadata field/value
+func createPurgeByMetadataCmd() *cobra.Command {
+	var (
+		metadataField string
+		metadataValue string
+		chunkSize     int
+		concurrency   int
+		limit         int
+	)
+
+	cmd := &cobra.Command{
+		Use:   "purge-by-metadata",
+		Short: "Purge KV values by metadata field/value",
+		Long:  `Find and delete KV values with matching metadata field and value.`,
+		Example: `  # Purge all entries with a specific metadata field value
+  cache-kv-purger kv purge-by-metadata --namespace-id your-namespace-id --field "type" --value "temporary"
+
+  # Purge all entries with any value for a metadata field
+  cache-kv-purger kv purge-by-metadata --namespace-id your-namespace-id --field "expirable"
+
+  # Fine-tune performance with chunk size and concurrency
+  cache-kv-purger kv purge-by-metadata --namespace-id your-namespace-id --field "category" --value "test" --chunk-size 200 --concurrency 20
+
+  # Preview what would be deleted without actually deleting
+  cache-kv-purger kv purge-by-metadata --namespace-id your-namespace-id --field "status" --value "draft" --dry-run
+
+  # Process only a limited number of keys
+  cache-kv-purger kv purge-by-metadata --namespace-id your-namespace-id --field "cache-tag" --value "blog" --limit 10`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Get account ID from flag, config, or environment variable
+			accountID := kvFlagsVars.accountID
+			if accountID == "" {
+				// Try to get from config or environment variable
+				cfg, err := config.LoadFromFile("")
+				if err == nil {
+					accountID = cfg.GetAccountID()
+				}
+			}
+			
+			if accountID == "" {
+				return fmt.Errorf("account ID is required, specify it with --account-id flag, CLOUDFLARE_ACCOUNT_ID environment variable, or set a default account in config")
+			}
+			
+			// Get namespace ID
+			namespaceID := kvFlagsVars.namespaceID
+			if namespaceID == "" {
+				// If title is provided, try to find namespace by title
+				if kvFlagsVars.title != "" {
+					// Create API client
+					client, err := api.NewClient()
+					if err != nil {
+						return fmt.Errorf("failed to create API client: %w", err)
+					}
+					
+					// Find namespace by title
+					ns, err := kv.FindNamespaceByTitle(client, accountID, kvFlagsVars.title)
+					if err != nil {
+						return fmt.Errorf("failed to find namespace by title: %w", err)
+					}
+					
+					namespaceID = ns.ID
+				} else {
+					return fmt.Errorf("namespace ID or title is required, specify with --namespace-id or --title flag")
+				}
+			}
+			
+			// Create API client
+			client, err := api.NewClient()
+			if err != nil {
+				return fmt.Errorf("failed to create API client: %w", err)
+			}
+			
+			// Check if dry run
+			dryRun, _ := cmd.Flags().GetBool("dry-run")
+			
+			// Verbose output
+			verbose, _ := cmd.Flags().GetBool("verbose")
+			
+			// Log initial info
+			if verbose {
+				if metadataValue != "" {
+					fmt.Printf("Finding keys with metadata field '%s' value matching '%s' in namespace '%s'...\n", 
+						metadataField, metadataValue, namespaceID)
+				} else {
+					fmt.Printf("Finding all keys with metadata field '%s' in namespace '%s'...\n", 
+						metadataField, namespaceID)
+				}
+				
+				if dryRun {
+					fmt.Println("Running in dry-run mode. No keys will be deleted.")
+				}
+				
+				fmt.Printf("Performance settings: chunk-size=%d, concurrency=%d\n", chunkSize, concurrency)
+			}
+			
+			// Progress tracking
+			var lastProgressTime time.Time
+			var lastKeysFetched, lastKeysProcessed, lastKeysMatched, lastKeysDeleted int
+			
+			// Create progress callback
+			progressCallback := func(keysFetched, keysProcessed, keysMatched, keysDeleted, total int) {
+				if !verbose {
+					return
+				}
+				
+				// Only update progress every 0.5 seconds to avoid flooding terminal
+				now := time.Now()
+				if lastProgressTime.IsZero() || now.Sub(lastProgressTime) > 500*time.Millisecond {
+					if keysFetched > lastKeysFetched {
+						fmt.Printf("Progress: Listed %d keys\n", keysFetched)
+						lastKeysFetched = keysFetched
+					}
+					
+					if keysProcessed > lastKeysProcessed {
+						fmt.Printf("Progress: Processed %d/%d keys (%d%%)\n", 
+							keysProcessed, total, keysProcessed*100/total)
+						lastKeysProcessed = keysProcessed
+					}
+					
+					if keysMatched > lastKeysMatched {
+						fmt.Printf("Progress: Found %d matching keys\n", keysMatched)
+						lastKeysMatched = keysMatched
+					}
+					
+					if keysDeleted > lastKeysDeleted {
+						fmt.Printf("Progress: Deleted %d keys\n", keysDeleted)
+						lastKeysDeleted = keysDeleted
+					}
+					
+					lastProgressTime = now
+				}
+			}
+			
+			// Run the deletion
+			startTime := time.Now()
+			count, err := kv.DeleteKeysByMetadata(client, accountID, namespaceID, metadataField, metadataValue,
+				chunkSize, dryRun, progressCallback)
+			duration := time.Since(startTime)
+			
+			if err != nil {
+				return fmt.Errorf("failed during purge operation: %w", err)
+			}
+			
+			// Output result
+			if dryRun {
+				// In dry run mode, count is the number of matches found
+				if metadataValue != "" {
+					fmt.Printf("Dry run: Found %d keys with metadata field '%s' value matching '%s'\n", 
+						count, metadataField, metadataValue)
+				} else {
+					fmt.Printf("Dry run: Found %d keys with metadata field '%s'\n", 
+						count, metadataField)
+				}
+			} else {
+				// In actual run mode, count is the number of keys deleted
+				if metadataValue != "" {
+					fmt.Printf("Successfully deleted %d keys with metadata field '%s' value matching '%s'\n", 
+						count, metadataField, metadataValue)
+				} else {
+					fmt.Printf("Successfully deleted %d keys with metadata field '%s'\n", 
+						count, metadataField)
+				}
+			}
+			
+			if verbose {
+				fmt.Printf("Operation completed in %s\n", duration.Round(time.Millisecond))
+			}
+			
+			return nil
+		},
+	}
+	
+	cmd.Flags().StringVar(&kvFlagsVars.namespaceID, "namespace-id", "", "ID of the namespace")
+	cmd.Flags().StringVar(&kvFlagsVars.title, "title", "", "Title of the namespace (alternative to namespace-id)")
+	cmd.Flags().StringVar(&metadataField, "field", "", "The metadata field to search for")
+	cmd.Flags().StringVar(&metadataValue, "value", "", "The metadata value to match (if empty, any value will match)")
+	cmd.Flags().IntVar(&chunkSize, "chunk-size", 100, "Number of keys to process in each chunk (affects memory usage)")
+	cmd.Flags().IntVar(&concurrency, "concurrency", 10, "Number of concurrent workers (affects performance)")
+	cmd.Flags().IntVar(&limit, "limit", 0, "Limit the number of keys to process (for testing)")
+	cmd.Flags().Bool("dry-run", false, "Show what would be deleted without actually deleting")
+	
+	cmd.MarkFlagRequired("field")
+	
+	return cmd
+}
+
 func init() {
 	rootCmd.AddCommand(kvCmd)
 	
@@ -2125,6 +3024,7 @@ func init() {
 	kvNamespaceCmd.AddCommand(createNamespaceCreateCmd())
 	kvNamespaceCmd.AddCommand(createNamespaceDeleteCmd())
 	kvNamespaceCmd.AddCommand(createNamespaceRenameCmd())
+	kvNamespaceCmd.AddCommand(createNamespaceBulkDeleteCmd())
 	
 	// Add values commands
 	kvCmd.AddCommand(kvValuesCmd)
@@ -2135,12 +3035,17 @@ func init() {
 	
 	// Add utility commands directly to kvCmd for better discoverability
 	kvCmd.AddCommand(createKeyExistsCmd())
+	kvCmd.AddCommand(createGetKeyWithMetadataCmd())  // Add our new command to get key with metadata
 	kvCmd.AddCommand(createPurgeByTagCmd())
+	kvCmd.AddCommand(createStreamingPurgeByTagCmd()) // Add our new optimized command
+	kvCmd.AddCommand(createPurgeByMetadataCmd())     // Add our new metadata-based purge command
+	kvCmd.AddCommand(createTestMetadataCmd())        // Add our simplified test command
 	kvCmd.AddCommand(createBulkUploadCmd())
 	kvCmd.AddCommand(createSimpleUploadCmd())
 	kvCmd.AddCommand(createBulkUploadBatchCmd())
 	kvCmd.AddCommand(createExportNamespaceCmd())
 	kvCmd.AddCommand(createSearchValuesCmd())
+	kvCmd.AddCommand(createTestDataWithMetadataCmd())
 	
 	// Add config command
 	kvCmd.AddCommand(createKVConfigCmd())

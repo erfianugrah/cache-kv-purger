@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"regexp"
 
 	"cache-kv-purger/internal/api"
 )
@@ -170,6 +171,112 @@ func FindNamespaceByTitle(client *api.Client, accountID, title string) (*Namespa
 	}
 
 	return nil, fmt.Errorf("namespace with title '%s' not found", title)
+}
+
+// DeleteMultipleNamespaces deletes multiple KV namespaces
+func DeleteMultipleNamespaces(client *api.Client, accountID string, namespaceIDs []string) ([]string, []error) {
+	if accountID == "" {
+		return nil, []error{fmt.Errorf("account ID is required")}
+	}
+	if len(namespaceIDs) == 0 {
+		return nil, []error{fmt.Errorf("at least one namespace ID is required")}
+	}
+
+	var successIDs []string
+	var errors []error
+
+	// Process each namespace deletion separately since the API doesn't support bulk namespace deletion
+	for _, nsID := range namespaceIDs {
+		if nsID == "" {
+			errors = append(errors, fmt.Errorf("empty namespace ID provided"))
+			continue
+		}
+
+		err := DeleteNamespace(client, accountID, nsID)
+		if err != nil {
+			errors = append(errors, fmt.Errorf("failed to delete namespace %s: %w", nsID, err))
+		} else {
+			successIDs = append(successIDs, nsID)
+		}
+	}
+
+	return successIDs, errors
+}
+
+// DeleteMultipleNamespacesWithProgress deletes multiple KV namespaces with progress callback
+func DeleteMultipleNamespacesWithProgress(client *api.Client, accountID string, namespaceIDs []string, progressCallback func(completed, total, success, failed int)) ([]string, []error) {
+	if accountID == "" {
+		return nil, []error{fmt.Errorf("account ID is required")}
+	}
+	if len(namespaceIDs) == 0 {
+		return nil, []error{fmt.Errorf("at least one namespace ID is required")}
+	}
+
+	var successIDs []string
+	var errors []error
+	totalCount := len(namespaceIDs)
+
+	// Process each namespace deletion separately
+	for i, nsID := range namespaceIDs {
+		if nsID == "" {
+			errors = append(errors, fmt.Errorf("empty namespace ID provided"))
+			
+			if progressCallback != nil {
+				progressCallback(i+1, totalCount, len(successIDs), len(errors))
+			}
+			continue
+		}
+
+		err := DeleteNamespace(client, accountID, nsID)
+		if err != nil {
+			errors = append(errors, fmt.Errorf("failed to delete namespace %s: %w", nsID, err))
+		} else {
+			successIDs = append(successIDs, nsID)
+		}
+		
+		if progressCallback != nil {
+			progressCallback(i+1, totalCount, len(successIDs), len(errors))
+		}
+	}
+
+	return successIDs, errors
+}
+
+// FindNamespacesByPattern finds namespaces with titles matching a regex pattern
+func FindNamespacesByPattern(client *api.Client, accountID string, pattern string) ([]Namespace, error) {
+	if accountID == "" {
+		return nil, fmt.Errorf("account ID is required")
+	}
+	if pattern == "" {
+		return nil, fmt.Errorf("pattern is required")
+	}
+
+	// Get all namespaces first
+	namespaces, err := ListNamespaces(client, accountID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list namespaces: %w", err)
+	}
+
+	// If no pattern, return all namespaces
+	if pattern == "*" {
+		return namespaces, nil
+	}
+
+	// Compile regex
+	regex, err := regexp.Compile(pattern)
+	if err != nil {
+		return nil, fmt.Errorf("invalid regex pattern: %w", err)
+	}
+
+	// Filter namespaces based on the pattern
+	var matchingNamespaces []Namespace
+	for _, ns := range namespaces {
+		if regex.MatchString(ns.Title) {
+			matchingNamespaces = append(matchingNamespaces, ns)
+		}
+	}
+
+	return matchingNamespaces, nil
 }
 
 // RenameNamespace renames a KV namespace

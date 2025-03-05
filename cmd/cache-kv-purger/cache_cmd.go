@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"strings"
 
 	"cache-kv-purger/internal/api"
 	"cache-kv-purger/internal/cache"
@@ -28,7 +27,8 @@ var purgeCmd = &cobra.Command{
 // purgeFlagsVars stores the variables for the purge command flags
 var purgeFlagsVars struct {
 	zoneID          string
-	zones           []string // Support for multiple zones
+	zones           []string // Support for multiple zones with --zones (repeated flag)
+	zonesCSV        []string // Support for multiple zones with --zone-list (comma separated)
 	purgeEverything bool
 	files           []string
 	tags            []string
@@ -58,6 +58,11 @@ func createPurgeEverythingCmd() *cobra.Command {
 			
 			// Get zone IDs
 			rawZones := purgeFlagsVars.zones
+
+				// Add zones from comma-separated list as well
+				if len(purgeFlagsVars.zonesCSV) > 0 {
+					rawZones = append(rawZones, purgeFlagsVars.zonesCSV...)
+				}
 			resolvedZoneIDs := make([]string, 0)
 			
 			// If multiple zones specified, resolve each one (could be name or ID)
@@ -595,6 +600,7 @@ func init() {
 	// Add zone ID flags to purge command, but keep the global flag as well
 	purgeCmd.PersistentFlags().StringVar(&purgeFlagsVars.zoneID, "zone-id", "", "Cloudflare Zone ID or domain name")
 	purgeCmd.PersistentFlags().StringArrayVar(&purgeFlagsVars.zones, "zones", []string{}, "Multiple Cloudflare Zone IDs or domain names (can be specified multiple times)")
+	purgeCmd.PersistentFlags().StringSliceVar(&purgeFlagsVars.zonesCSV, "zone-list", []string{}, "Comma-separated list of Cloudflare Zone IDs or domain names")
 	
 	// Add purge subcommands
 	purgeCmd.AddCommand(createPurgeEverythingCmd())
