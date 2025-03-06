@@ -31,6 +31,7 @@ func StreamingFilterKeysByMetadata(client *api.Client, accountID, namespaceID, m
 		concurrency = 20 // Default concurrency
 	}
 	if concurrency > 50 {
+		concurrency = 50 // Cap maximum concurrency
 	}
 
 	// Simple progress callback if none provided

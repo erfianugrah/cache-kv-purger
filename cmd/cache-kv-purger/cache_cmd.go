@@ -1,12 +1,11 @@
 package main
 
 import (
-	"fmt"
-
 	"cache-kv-purger/internal/api"
 	"cache-kv-purger/internal/cache"
 	"cache-kv-purger/internal/config"
 	"cache-kv-purger/internal/zones"
+	"fmt"
 	"github.com/spf13/cobra"
 	"os"
 )
@@ -288,9 +287,7 @@ func createPurgeFilesCmd() *cobra.Command {
 
 	cmd.Flags().StringArrayVar(&purgeFlagsVars.files, "file", []string{}, "URL of a file to purge (can be specified multiple times)")
 	if err := cmd.MarkFlagRequired("file"); err != nil {
-		// Log the error but continue, as this is likely a programming error
-		// rather than a runtime error
-		fmt.Fprintf(os.Stderr, "Warning: Failed to mark flag as required: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Warning: Failed to mark 'file' flag as required: %v\n", err)
 	}
 
 	return cmd
@@ -352,7 +349,9 @@ func createPurgeTagsCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringArrayVar(&purgeFlagsVars.tags, "tag", []string{}, "Cache tag to purge (can be specified multiple times)")
-	cmd.MarkFlagRequired("tag")
+	if err := cmd.MarkFlagRequired("tag"); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: Failed to mark 'tag' flag as required: %v\n", err)
+	}
 
 	return cmd
 }
@@ -413,7 +412,9 @@ func createPurgeHostsCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringArrayVar(&purgeFlagsVars.hosts, "host", []string{}, "Hostname to purge (can be specified multiple times)")
-	cmd.MarkFlagRequired("host")
+	if err := cmd.MarkFlagRequired("host"); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: Failed to mark 'host' flag as required: %v\n", err)
+	}
 
 	return cmd
 }
@@ -474,7 +475,9 @@ func createPurgePrefixesCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringArrayVar(&purgeFlagsVars.prefixes, "prefix", []string{}, "URL prefix to purge (can be specified multiple times)")
-	cmd.MarkFlagRequired("prefix")
+	if err := cmd.MarkFlagRequired("prefix"); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: Failed to mark 'prefix' flag as required: %v\n", err)
+	}
 
 	return cmd
 }
