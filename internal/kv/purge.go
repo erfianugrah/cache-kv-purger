@@ -28,7 +28,7 @@ func StreamingFilterKeysByMetadata(client *api.Client, accountID, namespaceID, m
 		chunkSize = 100 // Default chunk size
 	}
 	if concurrency <= 0 {
-		concurrency = 10 // Default concurrency
+		concurrency = 20 // Default concurrency
 	}
 	if concurrency > 50 {
 		concurrency = 50 // Cap maximum concurrency
@@ -110,7 +110,7 @@ func StreamingPurgeByTag(client *api.Client, accountID, namespaceID, tagField, t
 		chunkSize = 100 // Default chunk size
 	}
 	if concurrency <= 0 {
-		concurrency = 10 // Default concurrency
+		concurrency = 20 // Default concurrency
 	}
 	if concurrency > 50 {
 		concurrency = 50 // Cap maximum concurrency
