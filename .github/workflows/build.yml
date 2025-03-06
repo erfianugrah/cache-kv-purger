@@ -86,4 +86,9 @@ jobs:
         $(go env GOPATH)/bin/golangci-lint --version
 
     - name: Run golangci-lint
+      run: $(go env GOPATH)/bin/golangci-lint run --fix ./...
+      continue-on-error: true  # Don't fail the build if linting fails
+
+    - name: Show remaining lint issues
       run: $(go env GOPATH)/bin/golangci-lint run ./...
+      # This will show any remaining issues and fail if there are any
