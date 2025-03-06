@@ -8,9 +8,29 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    name: Build on ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            GOOS: linux
+            GOARCH: amd64
+            output: cache-kv-purger-linux-amd64
+          - os: macos-latest
+            GOOS: darwin
+            GOARCH: amd64
+            output: cache-kv-purger-darwin-amd64
+          - os: windows-latest
+            GOOS: windows
+            GOARCH: amd64
+            output: cache-kv-purger-windows-amd64.exe
+    
+    runs-on: ${{ matrix.os }}
+    
     steps:
-    - uses: actions/checkout@v3
+    - name: Checkout code
+      uses: actions/checkout@v3
 
     - name: Set up Go
       uses: actions/setup-go@v4
@@ -19,15 +39,24 @@ jobs:
         cache: true
 
     - name: Build
-      run: go build -v ./cmd/cache-kv-purger/main.go
+      run: go build -v -o ${{ matrix.output }} ./cmd/cache-kv-purger
+      env:
+        GOOS: ${{ matrix.GOOS }}
+        GOARCH: ${{ matrix.GOARCH }}
 
-    - name: Test
-      run: go test -v ./...
+    - name: Upload binary as artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: ${{ matrix.output }}
+        path: ./${{ matrix.output }}
+        retention-days: 7
 
-  lint:
+  test:
+    name: Test on Ubuntu
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
+    - name: Checkout code
+      uses: actions/checkout@v3
 
     - name: Set up Go
       uses: actions/setup-go@v4
@@ -35,7 +64,23 @@ jobs:
         go-version: '1.21'
         cache: true
 
-    - name: golangci-lint
+    - name: Run tests
+      run: go test -v ./...
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+        cache: true
+
+    - name: Run golangci-lint
       uses: golangci/golangci-lint-action@v3
       with:
         version: latest
