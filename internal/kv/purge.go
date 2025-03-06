@@ -10,20 +10,6 @@ import (
 	"time"
 )
 
-// FilterKeysByMetadata is deprecated and should be replaced with StreamingFilterKeysByMetadata
-// or, for better performance with high API rate limits, use PurgeByMetadataUpfront
-func FilterKeysByMetadata(client *api.Client, accountID, namespaceID, metadataField, metadataValue string, progressCallback func(fetched, processed, total int)) ([]KeyValuePair, error) {
-	// This is now just a wrapper around the more efficient streaming implementation
-	streamingCallback := func(keysFetched, keysProcessed, keysMatched, total int) {
-		if progressCallback != nil {
-			progressCallback(keysFetched, keysProcessed, total)
-		}
-	}
-
-	return StreamingFilterKeysByMetadata(client, accountID, namespaceID, metadataField, metadataValue,
-		100, 10, streamingCallback)
-}
-
 // StreamingFilterKeysByMetadata performs a streaming filter of keys by metadata
 // This is much more efficient for large namespaces as it processes in chunks
 func StreamingFilterKeysByMetadata(client *api.Client, accountID, namespaceID, metadataField, metadataValue string,
@@ -79,74 +65,30 @@ func StreamingFilterKeysByMetadata(client *api.Client, accountID, namespaceID, m
 		chunkKeys := keys[i:end]
 
 		// Process this chunk
-		matchedKeys, err := processMetadataChunk(client, accountID, namespaceID, chunkKeys,
-			metadataField, metadataValue, concurrency, func(processed, matched int) {
+		matchedKeys, err := processMetadataOnlyChunk(client, accountID, namespaceID, chunkKeys,
+			metadataField, metadataValue, func(processed int) {
 				totalProcessed = i + processed
-				progressCallback(totalKeys, totalProcessed, len(allMatchedKeys)+matched, totalKeys)
+				progressCallback(totalKeys, totalProcessed, len(allMatchedKeys), totalKeys)
 			})
 
 		if err != nil {
 			return allMatchedKeys, fmt.Errorf("error processing chunk %d-%d: %w", i, end-1, err)
 		}
 
-		// Add matched keys to results
-		allMatchedKeys = append(allMatchedKeys, matchedKeys...)
+		// Get full key-value pairs for matched keys
+		for _, keyName := range matchedKeys {
+			kvPair, err := GetKeyWithMetadata(client, accountID, namespaceID, keyName)
+			if err != nil {
+				continue
+			}
+			allMatchedKeys = append(allMatchedKeys, *kvPair)
+		}
 
 		// Update progress
 		progressCallback(totalKeys, totalProcessed, len(allMatchedKeys), totalKeys)
 	}
 
 	return allMatchedKeys, nil
-}
-
-// processMetadataChunk is deprecated and replaced by processMetadataOnlyChunk
-// This function used a less optimal approach and has been replaced by more efficient implementations
-// For backward compatibility, it now forwards to processMetadataOnlyChunk
-func processMetadataChunk(client *api.Client, accountID, namespaceID string,
-	chunkKeys []KeyValuePair, metadataField, metadataValue string, concurrency int,
-	progressCallback func(processed, matched int)) ([]KeyValuePair, error) {
-
-	// Forward to the better implementation but convert the callback format
-	onlyCallback := func(processed int) {
-		if progressCallback != nil {
-			// We don't know matched count here so pass 0
-			progressCallback(processed, 0)
-		}
-	}
-
-	// Get matching keys first
-	matchedKeyNames, err := processMetadataOnlyChunk(client, accountID, namespaceID,
-		chunkKeys, metadataField, metadataValue, onlyCallback)
-	if err != nil {
-		return nil, err
-	}
-
-	// Now fetch full values for matched keys (not the most efficient but maintains API compatibility)
-	result := make([]KeyValuePair, 0, len(matchedKeyNames))
-	for i, keyName := range matchedKeyNames {
-		kvPair, err := GetKeyWithMetadata(client, accountID, namespaceID, keyName)
-		if err != nil {
-			continue
-		}
-		result = append(result, *kvPair)
-
-		// Update progress
-		if progressCallback != nil && (i%10 == 0 || i == len(matchedKeyNames)-1) {
-			progressCallback(len(chunkKeys), len(result))
-		}
-	}
-
-	return result, nil
-}
-
-// DeleteKeysByMetadata is deprecated and should be replaced with PurgeByMetadataUpfront
-// or PurgeByMetadataOnly for better performance
-func DeleteKeysByMetadata(client *api.Client, accountID, namespaceID, metadataField, metadataValue string,
-	batchSize int, dryRun bool, progressCallback func(keysFetched, keysProcessed, keysMatched, keysDeleted, total int)) (int, error) {
-
-	// Forward to the better implementation
-	return PurgeByMetadataOnly(client, accountID, namespaceID, metadataField, metadataValue,
-		batchSize, 20, dryRun, progressCallback)
 }
 
 // StreamingPurgeByTag performs a streaming purge of keys with a specific tag value
