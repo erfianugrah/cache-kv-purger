@@ -1,0 +1,946 @@
+        "/accounts/{account_id}/storage/kv/namespaces/{namespace_id}": {
+            "delete": {
+                "description": "Deletes the namespace corresponding to the given ID.",
+                "operationId": "workers-kv-namespace-remove-a-namespace",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "namespace_id",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/components/schemas/workers-kv_namespace_identifier"
+                        }
+                    },
+                    {
+                        "in": "path",
+                        "name": "account_id",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/components/schemas/workers-kv_identifier"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {}
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/workers-kv_api-response-common-no-result"
+                                }
+                            }
+                        },
+                        "description": "Remove a Namespace response"
+                    },
+                    "4XX": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/workers-kv_api-response-common-failure"
+                                }
+                            }
+                        },
+                        "description": "Remove a Namespace response failure"
+                    }
+                },
+                "security": [
+                    {
+                        "api_token": []
+                    },
+                    {
+                        "api_email": [],
+                        "api_key": []
+                    }
+                ],
+                "summary": "Remove a Namespace",
+                "tags": [
+                    "Workers KV Namespace"
+                ],
+                "x-api-token-group": [
+                    "Workers KV Storage Write"
+                ]
+            },
+            "get": {
+                "description": "Get the namespace corresponding to the given ID.",
+                "operationId": "workers-kv-namespace-get-a-namespace",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "namespace_id",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/components/schemas/workers-kv_namespace_identifier"
+                        }
+                    },
+                    {
+                        "in": "path",
+                        "name": "account_id",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/components/schemas/workers-kv_identifier"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/workers-kv_api-response-common"
+                                        },
+                                        {
+                                            "properties": {
+                                                "result": {
+                                                    "$ref": "#/components/schemas/workers-kv_namespace"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        },
+                        "description": "Get a Namespace response"
+                    },
+                    "4XX": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/workers-kv_api-response-common-failure"
+                                }
+                            }
+                        },
+                        "description": "Get a Namespace response failure"
+                    }
+                },
+                "security": [
+                    {
+                        "api_token": []
+                    },
+                    {
+                        "api_email": [],
+                        "api_key": []
+                    }
+                ],
+                "summary": "Get a Namespace",
+                "tags": [
+                    "Workers KV Namespace"
+                ],
+                "x-api-token-group": [
+                    "Workers KV Storage Write",
+                    "Workers KV Storage Read"
+                ]
+            },
+            "put": {
+                "description": "Modifies a namespace's title.",
+                "operationId": "workers-kv-namespace-rename-a-namespace",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "namespace_id",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/components/schemas/workers-kv_namespace_identifier"
+                        }
+                    },
+                    {
+                        "in": "path",
+                        "name": "account_id",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/components/schemas/workers-kv_identifier"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/workers-kv_create_rename_namespace_body"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/workers-kv_api-response-common-no-result"
+                                }
+                            }
+                        },
+                        "description": "Rename a Namespace response"
+                    },
+                    "4XX": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/workers-kv_api-response-common-failure"
+                                }
+                            }
+                        },
+                        "description": "Rename a Namespace response failure"
+                    }
+                },
+                "security": [
+                    {
+                        "api_token": []
+                    },
+                    {
+                        "api_email": [],
+                        "api_key": []
+                    }
+                ],
+                "summary": "Rename a Namespace",
+                "tags": [
+                    "Workers KV Namespace"
+                ],
+                "x-api-token-group": [
+                    "Workers KV Storage Write"
+                ]
+            }
+        },
+        "/accounts/{account_id}/storage/kv/namespaces/{namespace_id}/bulk": {
+            "delete": {
+                "deprecated": true,
+                "description": "Remove multiple KV pairs from the namespace. Body should be an array of up to 10,000 keys to be removed.",
+                "operationId": "workers-kv-namespace-delete-multiple-key-value-pairs-deprecated",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "namespace_id",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/components/schemas/workers-kv_namespace_identifier"
+                        }
+                    },
+                    {
+                        "in": "path",
+                        "name": "account_id",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/components/schemas/workers-kv_identifier"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/workers-kv_bulk_delete"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/workers-kv_api-response-common-no-result"
+                                        },
+                                        {
+                                            "properties": {
+                                                "result": {
+                                                    "$ref": "#/components/schemas/workers-kv_bulk-result"
+                                                }
+                                            }
+                                        }
+                                    ]
+                                }
+                            }
+                        },
+                        "description": "Delete multiple key-value pairs response"
+                    },
+                    "4XX": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/workers-kv_api-response-common-no-result"
+                                        },
+                                        {
+                                            "properties": {
+                                                "result": {
+                                                    "$ref": "#/components/schemas/workers-kv_bulk-result"
+                                                }
+                                            }
+                                        }
+                                    ]
+                                }
+                            }
+                        },
+                        "description": "Delete multiple key-value pairs response failure"
+                    }
+                },
+                "security": [
+                    {
+                        "api_token": []
+                    },
+                    {
+                        "api_email": [],
+                        "api_key": []
+                    }
+                ],
+                "summary": "Delete multiple key-value pairs",
+                "tags": [
+                    "Workers KV Namespace"
+                ],
+                "x-api-token-group": [
+                    "Workers KV Storage Write"
+                ]
+            },
+            "put": {
+                "description": "Write multiple keys and values at once. Body should be an array of up to 10,000 key-value pairs to be stored, along with optional expiration information. Existing values and expirations will be overwritten. If neither `expiration` nor `expiration_ttl` is specified, the key-value pair will never expire. If both are set, `expiration_ttl` is used and `expiration` is ignored. The entire request size must be 100 megabytes or less.",
+                "operationId": "workers-kv-namespace-write-multiple-key-value-pairs",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "namespace_id",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/components/schemas/workers-kv_namespace_identifier"
+                        }
+                    },
+                    {
+                        "in": "path",
+                        "name": "account_id",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/components/schemas/workers-kv_identifier"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/workers-kv_bulk_write"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/workers-kv_api-response-common-no-result"
+                                        },
+                                        {
+                                            "properties": {
+                                                "result": {
+                                                    "$ref": "#/components/schemas/workers-kv_bulk-result"
+                                                }
+                                            }
+                                        }
+                                    ]
+                                }
+                            }
+                        },
+                        "description": "Write multiple key-value pairs response"
+                    },
+                    "4XX": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/workers-kv_api-response-common-no-result"
+                                        },
+                                        {
+                                            "properties": {
+                                                "result": {
+                                                    "$ref": "#/components/schemas/workers-kv_bulk-result"
+                                                }
+                                            }
+                                        }
+                                    ]
+                                }
+                            }
+                        },
+                        "description": "Write multiple key-value pairs response failure"
+                    }
+                },
+                "security": [
+                    {
+                        "api_token": []
+                    },
+                    {
+                        "api_email": [],
+                        "api_key": []
+                    }
+                ],
+                "summary": "Write multiple key-value pairs",
+                "tags": [
+                    "Workers KV Namespace"
+                ],
+                "x-api-token-group": [
+                    "Workers KV Storage Write"
+                ]
+            }
+        },
+        "/accounts/{account_id}/storage/kv/namespaces/{namespace_id}/bulk/delete": {
+            "post": {
+                "description": "Remove multiple KV pairs from the namespace. Body should be an array of up to 10,000 keys to be removed.",
+                "operationId": "workers-kv-namespace-delete-multiple-key-value-pairs",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "namespace_id",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/components/schemas/workers-kv_namespace_identifier"
+                        }
+                    },
+                    {
+                        "in": "path",
+                        "name": "account_id",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/components/schemas/workers-kv_identifier"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/workers-kv_bulk_delete"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/workers-kv_api-response-common-no-result"
+                                        },
+                                        {
+                                            "properties": {
+                                                "result": {
+                                                    "$ref": "#/components/schemas/workers-kv_bulk-result"
+                                                }
+                                            }
+                                        }
+                                    ]
+                                }
+                            }
+                        },
+                        "description": "Delete multiple key-value pairs response"
+                    },
+                    "4XX": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/workers-kv_api-response-common-no-result"
+                                        },
+                                        {
+                                            "properties": {
+                                                "result": {
+                                                    "$ref": "#/components/schemas/workers-kv_bulk-result"
+                                                }
+                                            }
+                                        }
+                                    ]
+                                }
+                            }
+                        },
+                        "description": "Delete multiple key-value pairs response failure"
+                    }
+                },
+                "security": [
+                    {
+                        "api_token": []
+                    },
+                    {
+                        "api_email": [],
+                        "api_key": []
+                    }
+                ],
+                "summary": "Delete multiple key-value pairs",
+                "tags": [
+                    "Workers KV Namespace"
+                ],
+                "x-api-token-group": [
+                    "Workers KV Storage Write"
+                ]
+            }
+        },
+        "/accounts/{account_id}/storage/kv/namespaces/{namespace_id}/keys": {
+            "get": {
+                "description": "Lists a namespace's keys.",
+                "operationId": "workers-kv-namespace-list-a-namespace'-s-keys",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "namespace_id",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/components/schemas/workers-kv_namespace_identifier"
+                        }
+                    },
+                    {
+                        "in": "path",
+                        "name": "account_id",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/components/schemas/workers-kv_identifier"
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "limit",
+                        "schema": {
+                            "default": 1000,
+                            "description": "The number of keys to return. The cursor attribute may be used to iterate over the next batch of keys if there are more than the limit.",
+                            "maximum": 1000,
+                            "minimum": 10,
+                            "type": "number"
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "prefix",
+                        "schema": {
+                            "description": "A string prefix used to filter down which keys will be returned. Exact matches and any key names that begin with the prefix will be returned.",
+                            "example": "My-Prefix",
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "cursor",
+                        "schema": {
+                            "description": "Opaque token indicating the position from which to continue when requesting the next set of records if the amount of list results was limited by the limit parameter. A valid value for the cursor can be obtained from the `cursors` object in the `result_info` structure.",
+                            "example": "6Ck1la0VxJ0djhidm1MdX2FyDGxLKVeeHZZmORS_8XeSuhz9SjIJRaSa2lnsF01tQOHrfTGAP3R5X1Kv5iVUuMbNKhWNAXHOl6ePB0TUL8nw",
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/workers-kv_api-response-common"
+                                        },
+                                        {
+                                            "properties": {
+                                                "result": {
+                                                    "items": {
+                                                        "$ref": "#/components/schemas/workers-kv_key"
+                                                    },
+                                                    "type": "array"
+                                                },
+                                                "result_info": {
+                                                    "properties": {
+                                                        "count": {
+                                                            "description": "Total results returned based on your list parameters.",
+                                                            "example": 1,
+                                                            "type": "number"
+                                                        },
+                                                        "cursor": {
+                                                            "$ref": "#/components/schemas/workers-kv_cursor"
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    ]
+                                }
+                            }
+                        },
+                        "description": "List a Namespace's Keys response"
+                    },
+                    "4XX": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/workers-kv_api-response-common-failure"
+                                }
+                            }
+                        },
+                        "description": "List a Namespace's Keys response failure"
+                    }
+                },
+                "security": [
+                    {
+                        "api_token": []
+                    },
+                    {
+                        "api_email": [],
+                        "api_key": []
+                    }
+                ],
+                "summary": "List a Namespace's Keys",
+                "tags": [
+                    "Workers KV Namespace"
+                ],
+                "x-api-token-group": [
+                    "Workers KV Storage Write",
+                    "Workers KV Storage Read"
+                ]
+            }
+        },
+        "/accounts/{account_id}/storage/kv/namespaces/{namespace_id}/metadata/{key_name}": {
+            "get": {
+                "description": "Returns the metadata associated with the given key in the given namespace. Use URL-encoding to use special characters (for example, `:`, `!`, `%`) in the key name.",
+                "operationId": "workers-kv-namespace-read-the-metadata-for-a-key",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "key_name",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/components/schemas/workers-kv_key_name"
+                        }
+                    },
+                    {
+                        "in": "path",
+                        "name": "namespace_id",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/components/schemas/workers-kv_namespace_identifier"
+                        }
+                    },
+                    {
+                        "in": "path",
+                        "name": "account_id",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/components/schemas/workers-kv_identifier"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/workers-kv_api-response-common"
+                                        },
+                                        {
+                                            "properties": {
+                                                "result": {
+                                                    "$ref": "#/components/schemas/workers-kv_list_metadata"
+                                                }
+                                            }
+                                        }
+                                    ]
+                                }
+                            }
+                        },
+                        "description": "Read the metadata for a key response"
+                    },
+                    "4XX": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/workers-kv_api-response-common-failure"
+                                }
+                            }
+                        },
+                        "description": "Read the metadata for a key response failure"
+                    }
+                },
+                "security": [
+                    {
+                        "api_token": []
+                    },
+                    {
+                        "api_email": [],
+                        "api_key": []
+                    }
+                ],
+                "summary": "Read the metadata for a key",
+                "tags": [
+                    "Workers KV Namespace"
+                ],
+                "x-api-token-group": [
+                    "Workers KV Storage Write",
+                    "Workers KV Storage Read"
+                ]
+            }
+        },
+        "/accounts/{account_id}/storage/kv/namespaces/{namespace_id}/values/{key_name}": {
+            "delete": {
+                "description": "Remove a KV pair from the namespace. Use URL-encoding to use special characters (for example, `:`, `!`, `%`) in the key name.",
+                "operationId": "workers-kv-namespace-delete-key-value-pair",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "key_name",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/components/schemas/workers-kv_key_name"
+                        }
+                    },
+                    {
+                        "in": "path",
+                        "name": "namespace_id",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/components/schemas/workers-kv_namespace_identifier"
+                        }
+                    },
+                    {
+                        "in": "path",
+                        "name": "account_id",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/components/schemas/workers-kv_identifier"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {}
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/workers-kv_api-response-common-no-result"
+                                }
+                            }
+                        },
+                        "description": "Delete key-value pair response"
+                    },
+                    "4XX": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/workers-kv_api-response-common-failure"
+                                }
+                            }
+                        },
+                        "description": "Delete key-value pair response failure"
+                    }
+                },
+                "security": [
+                    {
+                        "api_token": []
+                    },
+                    {
+                        "api_email": [],
+                        "api_key": []
+                    }
+                ],
+                "summary": "Delete key-value pair",
+                "tags": [
+                    "Workers KV Namespace"
+                ],
+                "x-api-token-group": [
+                    "Workers KV Storage Write"
+                ]
+            },
+            "get": {
+                "description": "Returns the value associated with the given key in the given namespace. Use URL-encoding to use special characters (for example, `:`, `!`, `%`) in the key name. If the KV-pair is set to expire at some point, the expiration time as measured in seconds since the UNIX epoch will be returned in the `expiration` response header.",
+                "operationId": "workers-kv-namespace-read-key-value-pair",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "key_name",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/components/schemas/workers-kv_key_name"
+                        }
+                    },
+                    {
+                        "in": "path",
+                        "name": "namespace_id",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/components/schemas/workers-kv_namespace_identifier"
+                        }
+                    },
+                    {
+                        "in": "path",
+                        "name": "account_id",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/components/schemas/workers-kv_identifier"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/octet-stream": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/workers-kv_value"
+                                }
+                            }
+                        },
+                        "description": "Read key-value pair response"
+                    },
+                    "4XX": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/workers-kv_api-response-common-failure"
+                                }
+                            }
+                        },
+                        "description": "Read key-value pair response failure"
+                    }
+                },
+                "security": [
+                    {
+                        "api_token": []
+                    },
+                    {
+                        "api_email": [],
+                        "api_key": []
+                    }
+                ],
+                "summary": "Read key-value pair",
+                "tags": [
+                    "Workers KV Namespace"
+                ],
+                "x-api-token-group": [
+                    "Workers KV Storage Write",
+                    "Workers KV Storage Read"
+                ]
+            },
+            "put": {
+                "description": "Write a value identified by a key. Use URL-encoding to use special characters (for example, `:`, `!`, `%`) in the key name. Body should be the value to be stored. If JSON metadata to be associated with the key/value pair is needed, use `multipart/form-data` content type for your PUT request (see dropdown below in `REQUEST BODY SCHEMA`). Existing values, expirations, and metadata will be overwritten. If neither `expiration` nor `expiration_ttl` is specified, the key-value pair will never expire. If both are set, `expiration_ttl` is used and `expiration` is ignored.",
+                "operationId": "workers-kv-namespace-write-key-value-pair-with-metadata",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "key_name",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/components/schemas/workers-kv_key_name"
+                        }
+                    },
+                    {
+                        "in": "path",
+                        "name": "namespace_id",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/components/schemas/workers-kv_namespace_identifier"
+                        }
+                    },
+                    {
+                        "in": "path",
+                        "name": "account_id",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/components/schemas/workers-kv_identifier"
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "expiration",
+                        "schema": {
+                            "$ref": "#/components/schemas/workers-kv_expiration"
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "expiration_ttl",
+                        "schema": {
+                            "$ref": "#/components/schemas/workers-kv_expiration_ttl"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "*/*": {
+                            "schema": {
+                                "$ref": "#/components/schemas/workers-kv_value"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "properties": {
+                                    "metadata": {
+                                        "$ref": "#/components/schemas/workers-kv_metadata"
+                                    },
+                                    "value": {
+                                        "$ref": "#/components/schemas/workers-kv_value"
+                                    }
+                                },
+                                "required": [
+                                    "value",
+                                    "metadata"
+                                ],
+                                "type": "object"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/workers-kv_api-response-common-no-result"
+                                }
+                            }
+                        },
+                        "description": "Write key-value pair with metadata response"
+                    },
+                    "4XX": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/workers-kv_api-response-common-failure"
+                                }
+                            }
+                        },
+                        "description": "Write key-value pair with metadata response failure"
+                    }
+                },
+                "security": [
+                    {
+                        "api_token": []
+                    },
+                    {
+                        "api_email": [],
+                        "api_key": []
+                    }
+                ],
+                "summary": "Write key-value pair with optional metadata",
+                "tags": [
+                    "Workers KV Namespace"
+                ],
+                "x-api-token-group": [
+                    "Workers KV Storage Write"
+                ]
+            }
+        },
