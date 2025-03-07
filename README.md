@@ -4,7 +4,23 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/erfianugrah/cache-kv-purger)](https://goreportcard.com/report/github.com/erfianugrah/cache-kv-purger)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A command-line interface tool for managing Cloudflare cache purging and KV store operations.
+A command-line interface tool for managing Cloudflare cache purging and Workers KV store operations.
+
+## Table of Contents
+
+- [Features](#features)
+- [Installation](#installation)
+- [Authentication](#authentication)
+- [Configuration](#configuration)
+- [Global Commands](#global-commands)
+- [Cache Commands](#cache-commands)
+- [KV Namespace Commands](#kv-namespace-commands)
+- [KV Values Commands](#kv-values-commands)
+- [KV Utility Commands](#kv-utility-commands)
+- [Zone Commands](#zone-commands)
+- [Future Enhancements](#future-enhancements)
+- [Development](#development)
+- [License](#license)
 
 ## Features
 
@@ -16,21 +32,34 @@ A command-line interface tool for managing Cloudflare cache purging and KV store
 
 - **KV Store Management**
   - Create, list, rename, and delete namespaces
+  - Bulk namespace management with pattern matching
   - Read, write, and delete key-value pairs
-  - High-performance bulk operations
-  - Optimized metadata and cache-tag purging
-  - Export and import functionality
-  - Search keys and values using regex patterns
+  - Metadata and expiration support
 
-- **Performance Optimizations**
-  - Concurrent batch processing for uploads
-  - Streaming operations for large datasets
-  - Metadata-optimized purging algorithms
-  - Configurable concurrency and batch sizes
-  - Memory-efficient processing for large namespaces
-  - Comprehensive progress reporting with `--verbose` flag
+- **Zone Management**
+  - List and query zone information
+  - Configure default zones
+  - Zone resolution by name or ID
 
 ## Installation
+
+### From Binary Releases (Recommended)
+
+Download the latest release for your platform from the [Releases page](https://github.com/erfianugrah/cache-kv-purger/releases).
+
+```bash
+# Download (replace X.Y.Z with version and OS with your platform)
+curl -LO https://github.com/erfianugrah/cache-kv-purger/releases/download/vX.Y.Z/cache-kv-purger_Linux_x86_64.tar.gz
+
+# Extract
+tar -xzf cache-kv-purger_Linux_x86_64.tar.gz
+
+# Move to a directory in your PATH
+sudo mv cache-kv-purger /usr/local/bin/
+
+# Verify installation
+cache-kv-purger --version
+```
 
 ### From Source
 
@@ -40,294 +69,559 @@ git clone https://github.com/erfianugrah/cache-kv-purger.git
 cd cache-kv-purger
 
 # Build the binary
-go build -o cache-kv-purger cmd/cache-kv-purger/main.go cmd/cache-kv-purger/cache_cmd.go cmd/cache-kv-purger/config_cmd.go cmd/cache-kv-purger/kv_cmd.go cmd/cache-kv-purger/zones_cmd.go
+go build -o cache-kv-purger ./cmd/cache-kv-purger
+
+# Run the tool
+./cache-kv-purger
 ```
 
-### Binary Releases
+## Authentication
 
-Download the latest release for your platform from the [Releases page](https://github.com/erfianugrah/cache-kv-purger/releases).
+The tool uses Cloudflare API credentials for authentication.
+
+### API Token (Recommended)
+
+```bash
+# Set environment variable
+export CLOUDFLARE_API_TOKEN=your_cloudflare_api_token
+```
+
+### API Key (Legacy)
+
+```bash
+# Set environment variables
+export CLOUDFLARE_API_KEY=your_cloudflare_api_key
+export CLOUDFLARE_EMAIL=your_email@example.com
+```
 
 ## Configuration
 
-### API Token
-
-You'll need a Cloudflare API token with the appropriate permissions:
-
-```bash
-# Set environment variable
-export CF_API_TOKEN=your_cloudflare_api_token
-
-# Or configure using the tool
-./cache-kv-purger config set --token your_cloudflare_api_token
-```
-
 ### Account ID and Zone ID
 
-For KV operations, you'll need your Cloudflare Account ID:
+For KV operations, you'll need your Cloudflare Account ID. For cache operations, you'll need your Zone ID or domain name.
+
+#### Using Environment Variables
 
 ```bash
-# Set environment variable
+# Set environment variables
 export CLOUDFLARE_ACCOUNT_ID=your_account_id
-
-# Or configure using the tool
-./cache-kv-purger kv config --account-id your_account_id
-```
-
-For cache operations, you'll need your Zone ID or domain:
-
-```bash
-# Use with commands
-./cache-kv-purger cache purge --zone example.com ...
-
-# Or set default zone
 export CLOUDFLARE_ZONE_ID=your_zone_id
 ```
 
-## Usage Examples
-
-### Cache Operations
+#### Using Config Command
 
 ```bash
-# Purge everything in a zone
-./cache-kv-purger cache purge everything --zone example.com
+# Set default zone
+cache-kv-purger config set-defaults --zone example.com
 
-# Purge specific files
-./cache-kv-purger cache purge files --zone example.com --file https://example.com/path/to/file.jpg --file https://example.com/path/to/another.css
+# Set default account ID
+cache-kv-purger config set-defaults --account-id your_account_id
 
-# Purge by cache tags
-./cache-kv-purger cache purge tags --zone example.com --tag product-listing --tag user-profile
+# Set custom API endpoint (if needed)
+cache-kv-purger config set-defaults --api-endpoint https://custom-api.cloudflare.com/client/v4
 
-# Purge by hosts
-./cache-kv-purger cache purge hosts --zone example.com --host subdomain.example.com
-
-# Purge by URL prefixes
-./cache-kv-purger cache purge prefixes --zone example.com --prefix /blog/ --prefix /products/
+# View current configuration
+cache-kv-purger config show
 ```
 
-### KV Namespace Operations
+## Global Commands
+
+All commands support the following global flags:
+
+- `--verbose`: Enable detailed output
+- `--zone`: Specify a zone ID or domain name
+
+### Config Command
 
 ```bash
-# List all KV namespaces in your account
-./cache-kv-purger kv namespace list --verbose
+# Show current configuration
+cache-kv-purger config show
 
-# Create a new namespace
-./cache-kv-purger kv namespace create --title "My Namespace"
-
-# Delete a namespace
-./cache-kv-purger kv namespace delete --namespace-id your_namespace_id
-
-# Rename a namespace
-./cache-kv-purger kv namespace rename --namespace-id your_namespace_id --title "New Name"
-
-# Bulk delete multiple namespaces matching a pattern
-./cache-kv-purger kv namespace bulk-delete --pattern "test-*" --dry-run
+# Set default values
+cache-kv-purger config set-defaults --zone example.com --account-id 01a7362d577a6c3019a474fd6f485823
 ```
 
-### KV Key-Value Operations
+## Cache Commands
+
+### Purge Everything
+
+Purges all cached content for a zone.
 
 ```bash
-# List keys in a namespace (first page)
-./cache-kv-purger kv values list --namespace-id your_namespace_id
+# Using zone ID
+cache-kv-purger cache purge everything --zone 01a7362d577a6c3019a474fd6f485823
 
-# List all keys in a namespace (handles pagination)
-./cache-kv-purger kv values list --namespace-id your_namespace_id --all
+# Using domain name
+cache-kv-purger cache purge everything --zone example.com
 
-# Get a value
-./cache-kv-purger kv values get --namespace-id your_namespace_id --key your_key
+# Using default zone from config or environment variable
+cache-kv-purger cache purge everything
 
-# Get a value with metadata
-./cache-kv-purger kv get-with-metadata --namespace-id your_namespace_id --key your_key
+# With verbose output
+cache-kv-purger cache purge everything --zone example.com --verbose
 
-# Check if a key exists
-./cache-kv-purger kv exists --namespace-id your_namespace_id --key your_key
-
-# Write a value
-./cache-kv-purger kv values put --namespace-id your_namespace_id --key your_key --value your_value
-
-# Write a value with metadata and expiration
-./cache-kv-purger kv values put --namespace-id your_namespace_id --key your_key --value your_value --expiration 1735689600
-
-# Write a value from a file
-./cache-kv-purger kv values put --namespace-id your_namespace_id --key your_key --file ./data.json
-
-# Delete a value
-./cache-kv-purger kv values delete --namespace-id your_namespace_id --key your_key
-
-# Export a namespace to a JSON file
-./cache-kv-purger kv export --namespace-id your_namespace_id --file export.json --include-metadata
-
-# Search keys and values with regex patterns
-./cache-kv-purger kv search --namespace-id your_namespace_id --key-pattern "user_.*" --value-pattern "cache-tag"
-
-# Search with different output formats
-./cache-kv-purger kv search --namespace-id your_namespace_id --key-pattern "test-.*" --format json
+# Purge multiple zones at once
+cache-kv-purger cache purge everything --zones example.com --zones example.org
+cache-kv-purger cache purge everything --zone-list "example.com,example.org,example.net"
 ```
 
-## Advanced Features
+### Purge Files
 
-### Bulk Import Operations
+Purges specific files from the cache by URL.
 
 ```bash
-# Generate test data with metadata for testing
-./cache-kv-purger kv generate-test-data --count 100 --output test-data.json --tag-field cache-tag --tag-values product,blog,homepage,api
+# Purge a single file
+cache-kv-purger cache purge files --zone example.com --file https://example.com/css/styles.css
 
-# Optimized bulk upload with concurrent processing (recommended)
-./cache-kv-purger kv bulk-concurrent --namespace-id your_namespace_id --file data.json --concurrency 30 --batch-size 100 --verbose
+# Purge multiple files
+cache-kv-purger cache purge files --zone example.com \
+  --file https://example.com/css/styles.css \
+  --file https://example.com/js/app.js \
+  --file https://example.com/images/logo.png
 
-# For high-throughput environments with high API rate limits
-./cache-kv-purger kv bulk-concurrent --namespace-id your_namespace_id --file data.json --concurrency 50 --batch-size 50
-
-# Legacy bulk upload methods (not recommended, use bulk-concurrent instead)
-./cache-kv-purger kv bulk-batch --namespace-id your_namespace_id --file data.json
-./cache-kv-purger kv bulk-upload --namespace-id your_namespace_id --file data.json
-./cache-kv-purger kv simple-upload --namespace-id your_namespace_id --file data.json
+# Using zone ID with verbose output
+cache-kv-purger cache purge files --zone-id 01a7362d577a6c3019a474fd6f485823 \
+  --file https://example.com/css/styles.css \
+  --verbose
 ```
 
-### Cache Tag Purging
+### Purge Cache Tags
+
+Purges content associated with specific cache tags.
 
 ```bash
-# Optimized streaming purge by cache-tag (recommended for large namespaces)
-./cache-kv-purger kv purge-by-tag-streaming --namespace-id your_namespace_id --tag-value homepage --chunk-size 200 --concurrency 20
+# Purge a single tag
+cache-kv-purger cache purge tags --zone example.com --tag product-listing
 
-# Preview what would be deleted with dry-run mode
-./cache-kv-purger kv purge-by-tag-streaming --namespace-id your_namespace_id --tag-value homepage --dry-run --verbose
+# Purge multiple tags
+cache-kv-purger cache purge tags --zone example.com \
+  --tag product-listing \
+  --tag blog-posts \
+  --tag user-profile
 
-# Delete all entries with any value for a specific field
-./cache-kv-purger kv purge-by-tag-streaming --namespace-id your_namespace_id --field cache-tag
-
-# Legacy purge by cache-tag (not recommended)
-./cache-kv-purger kv purge-by-tag --namespace-id your_namespace_id --tag-value homepage
+# Using zone ID with verbose output
+cache-kv-purger cache purge tags --zone-id 01a7362d577a6c3019a474fd6f485823 \
+  --tag product-listing \
+  --verbose
 ```
 
-### Metadata Operations
+### Purge Hosts
+
+Purges content from specific hosts within a zone.
 
 ```bash
-# Extremely fast metadata purging (recommended for most use cases)
-./cache-kv-purger kv purge-by-metadata-only --namespace-id your_namespace_id --field cache-tag --value blog --verbose
+# Purge a single host
+cache-kv-purger cache purge hosts --zone example.com --host images.example.com
 
-# High throughput metadata purging (optimized for high API rate limits)
-./cache-kv-purger kv purge-by-metadata-upfront --namespace-id your_namespace_id --field cache-tag --value blog --concurrency 500
+# Purge multiple hosts
+cache-kv-purger cache purge hosts --zone example.com \
+  --host images.example.com \
+  --host api.example.com \
+  --host blog.example.com
 
-# Preview what would be deleted without making changes
-./cache-kv-purger kv purge-by-metadata-only --namespace-id your_namespace_id --field cache-tag --value blog --dry-run
-
-# Test metadata functionality on a small set of keys
-./cache-kv-purger kv test-metadata --namespace-id your_namespace_id --field cache-tag --limit 10
-
-# Legacy metadata purging command (not recommended)
-./cache-kv-purger kv purge-by-metadata --namespace-id your_namespace_id --field cache-tag --value blog
+# Using zone ID with verbose output
+cache-kv-purger cache purge hosts --zone-id 01a7362d577a6c3019a474fd6f485823 \
+  --host images.example.com \
+  --verbose
 ```
 
-### Working with Multiple Zones
+### Purge Prefixes
+
+Purges content with specific URL prefixes.
 
 ```bash
-# Purge cache in multiple zones simultaneously
-./cache-kv-purger cache purge everything --zones example.com --zones example.org --zones example.net
+# Purge a single prefix
+cache-kv-purger cache purge prefixes --zone example.com --prefix /blog/
+
+# Purge multiple prefixes
+cache-kv-purger cache purge prefixes --zone example.com \
+  --prefix /blog/ \
+  --prefix /products/ \
+  --prefix /api/v1/
+
+# Using zone ID with verbose output
+cache-kv-purger cache purge prefixes --zone-id 01a7362d577a6c3019a474fd6f485823 \
+  --prefix /blog/ \
+  --verbose
 ```
 
-## Performance Optimizations
+### Purge Custom
 
-The tool includes several performance-optimized commands that are designed to handle large-scale Cloudflare KV operations efficiently:
+Purges cache with custom options, allowing multiple purge types at once.
 
-### KV Bulk Operations
-- **bulk-concurrent**: Uploads JSON data using concurrent batch operations, supporting high throughput with configurable concurrency and batch sizes.
-- **write-multiple-values-concurrently**: Internal implementation that processes items with parallel operations, maximizing API rate limit usage.
-- **Performance metrics**: Displays operations per second and execution time with `--verbose` flag.
+```bash
+# Purge specific files and prefixes
+cache-kv-purger cache purge custom --zone example.com \
+  --file https://example.com/css/styles.css \
+  --file https://example.com/js/app.js \
+  --prefix /blog/ \
+  --prefix /products/
 
-### KV Purging Operations
-- **purge-by-metadata-only**: Extremely efficient metadata-based purging that focuses only on metadata operations without loading values.
-- **purge-by-metadata-upfront**: High-throughput approach that loads all metadata first and then processes in memory, designed for environments with high API rate limits.
-- **purge-by-tag-streaming**: Streaming approach to find and delete entries with specific cache-tag values, optimized for working with large namespaces.
+# Purge everything along with specific hosts
+cache-kv-purger cache purge custom --zone example.com \
+  --everything \
+  --host images.example.com
 
-### Data Management Operations
-- **export**: Efficiently exports keys, values, and metadata with parallel processing.
-- **search**: Performs regex-based search on keys and values with multiple output formats (simple, table, json, keys).
-- **get-with-metadata**: Retrieves both value and metadata in a single operation.
+# Complex example with multiple options
+cache-kv-purger cache purge custom --zone example.com \
+  --file https://example.com/css/styles.css \
+  --tag product-listing \
+  --host images.example.com \
+  --prefix /blog/ \
+  --verbose
+```
 
-### Implementation Details
-- The tool automatically uses batching, concurrency, and streaming patterns to maximize performance.
-- Legacy commands like `bulk-batch`, `purge-by-tag`, and `simple-upload` now internally use the optimized implementations.
-- All operations include detailed progress reporting when used with `--verbose` flag.
-- Commands support `--dry-run` flags for testing operations without making changes.
-- Memory-efficient streaming operations for handling large datasets.
+## KV Namespace Commands
+
+### List Namespaces
+
+Lists all KV namespaces in an account.
+
+```bash
+# Basic usage
+cache-kv-purger kv namespace list --account-id 01a7362d577a6c3019a474fd6f485823
+
+# Using default account ID from config
+cache-kv-purger kv namespace list
+
+# With verbose output
+cache-kv-purger kv namespace list --verbose
+```
+
+### Create Namespace
+
+Creates a new KV namespace.
+
+```bash
+# Basic usage
+cache-kv-purger kv namespace create --account-id 01a7362d577a6c3019a474fd6f485823 --title "My Application Cache"
+
+# Using default account ID from config
+cache-kv-purger kv namespace create --title "My Application Cache"
+
+# With verbose output
+cache-kv-purger kv namespace create --title "My Application Cache" --verbose
+```
+
+### Delete Namespace
+
+Deletes a KV namespace.
+
+```bash
+# Using namespace ID
+cache-kv-purger kv namespace delete --account-id 01a7362d577a6c3019a474fd6f485823 --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7
+
+# Using namespace title
+cache-kv-purger kv namespace delete --account-id 01a7362d577a6c3019a474fd6f485823 --title "My Application Cache"
+
+# Using default account ID from config
+cache-kv-purger kv namespace delete --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7
+
+# With verbose output
+cache-kv-purger kv namespace delete --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --verbose
+```
+
+### Rename Namespace
+
+Renames a KV namespace.
+
+```bash
+# Basic usage
+cache-kv-purger kv namespace rename --account-id 01a7362d577a6c3019a474fd6f485823 --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --title "New Name"
+
+# Using default account ID from config
+cache-kv-purger kv namespace rename --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --title "New Name"
+
+# With verbose output
+cache-kv-purger kv namespace rename --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --title "New Name" --verbose
+```
+
+### Bulk Delete Namespaces
+
+Deletes multiple KV namespaces matching a pattern or specific IDs.
+
+```bash
+# Delete by pattern with dry-run (preview only)
+cache-kv-purger kv namespace bulk-delete --account-id 01a7362d577a6c3019a474fd6f485823 --pattern "test-*" --dry-run
+
+# Delete by pattern with confirmation
+cache-kv-purger kv namespace bulk-delete --account-id 01a7362d577a6c3019a474fd6f485823 --pattern "test-*"
+
+# Delete by pattern without confirmation
+cache-kv-purger kv namespace bulk-delete --account-id 01a7362d577a6c3019a474fd6f485823 --pattern "test-*" --force
+
+# Delete specific namespace IDs
+cache-kv-purger kv namespace bulk-delete --account-id 01a7362d577a6c3019a474fd6f485823 --namespace-ids "id1,id2,id3"
+
+# With verbose output
+cache-kv-purger kv namespace bulk-delete --account-id 01a7362d577a6c3019a474fd6f485823 --pattern "test-*" --verbose
+```
+
+## KV Values Commands
+
+### List Keys
+
+Lists keys in a KV namespace.
+
+```bash
+# List first page of keys
+cache-kv-purger kv values list --account-id 01a7362d577a6c3019a474fd6f485823 --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7
+
+# List all keys (handle pagination automatically)
+cache-kv-purger kv values list --account-id 01a7362d577a6c3019a474fd6f485823 --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --all
+
+# Using namespace title instead of ID
+cache-kv-purger kv values list --account-id 01a7362d577a6c3019a474fd6f485823 --title "My Application Cache"
+
+# Using default account ID from config
+cache-kv-purger kv values list --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --all
+
+# With verbose output
+cache-kv-purger kv values list --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --all --verbose
+```
+
+### Get Value
+
+Gets a value for a key.
+
+```bash
+# Basic usage
+cache-kv-purger kv values get --account-id 01a7362d577a6c3019a474fd6f485823 --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --key mykey
+
+# Using namespace title instead of ID
+cache-kv-purger kv values get --account-id 01a7362d577a6c3019a474fd6f485823 --title "My Application Cache" --key mykey
+
+# Using default account ID from config
+cache-kv-purger kv values get --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --key mykey
+
+# With verbose output
+cache-kv-purger kv values get --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --key mykey --verbose
+
+# Redirect output to file
+cache-kv-purger kv values get --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --key mykey > output.json
+```
+
+### Put Value
+
+Writes a value for a key.
+
+```bash
+# Using direct value
+cache-kv-purger kv values put --account-id 01a7362d577a6c3019a474fd6f485823 --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --key mykey --value "My value data"
+
+# Using file input
+cache-kv-purger kv values put --account-id 01a7362d577a6c3019a474fd6f485823 --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --key config-json --file ./config.json
+
+# Using namespace title instead of ID
+cache-kv-purger kv values put --account-id 01a7362d577a6c3019a474fd6f485823 --title "My Application Cache" --key mykey --value "My value data"
+
+# With expiration time (Unix timestamp)
+cache-kv-purger kv values put --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --key temporary-key --value "Temporary data" --expiration 1735689600
+
+# With verbose output
+cache-kv-purger kv values put --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --key mykey --value "My value data" --verbose
+```
+
+### Delete Value
+
+Deletes a value for a key.
+
+```bash
+# Basic usage
+cache-kv-purger kv values delete --account-id 01a7362d577a6c3019a474fd6f485823 --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --key mykey
+
+# Using namespace title instead of ID
+cache-kv-purger kv values delete --account-id 01a7362d577a6c3019a474fd6f485823 --title "My Application Cache" --key mykey
+
+# Using default account ID from config
+cache-kv-purger kv values delete --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --key mykey
+
+# With verbose output
+cache-kv-purger kv values delete --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --key mykey --verbose
+```
+
+## KV Utility Commands
+
+### Get Key With Metadata
+
+Gets a key's value along with its metadata.
+
+```bash
+# Basic usage
+cache-kv-purger kv get-with-metadata --account-id 01a7362d577a6c3019a474fd6f485823 --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --key mykey
+
+# Using namespace title instead of ID
+cache-kv-purger kv get-with-metadata --account-id 01a7362d577a6c3019a474fd6f485823 --title "My Application Cache" --key mykey
+
+# Using default account ID from config
+cache-kv-purger kv get-with-metadata --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --key mykey
+
+# With verbose output
+cache-kv-purger kv get-with-metadata --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --key mykey --verbose
+```
+
+### Check If Key Exists
+
+Checks if a key exists in a namespace without retrieving its value.
+
+```bash
+# Basic usage
+cache-kv-purger kv exists --account-id 01a7362d577a6c3019a474fd6f485823 --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --key mykey
+
+# Using namespace title instead of ID
+cache-kv-purger kv exists --account-id 01a7362d577a6c3019a474fd6f485823 --title "My Application Cache" --key mykey
+
+# Using default account ID from config
+cache-kv-purger kv exists --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --key mykey
+
+# With verbose output
+cache-kv-purger kv exists --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --key mykey --verbose
+
+# Using in scripts (returns non-zero exit code if key doesn't exist)
+if cache-kv-purger kv exists --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --key mykey; then
+  echo "Key exists"
+else
+  echo "Key does not exist"
+fi
+```
+
+### Configure KV Settings
+
+Sets default account ID for KV operations.
+
+```bash
+# Set default account ID
+cache-kv-purger kv config --account-id 01a7362d577a6c3019a474fd6f485823
+
+# Show current KV configuration
+cache-kv-purger kv config
+```
+
+## Zone Commands
+
+### List Zones
+
+Lists all zones in an account.
+
+```bash
+# Basic usage
+cache-kv-purger zones list
+
+# Specify account ID
+cache-kv-purger zones list --account-id 01a7362d577a6c3019a474fd6f485823
+
+# With verbose output
+cache-kv-purger zones list --verbose
+```
+
+### Get Zone
+
+Gets details for a specific zone.
+
+```bash
+# Using domain name
+cache-kv-purger zones get example.com
+
+# Using account ID for lookup
+cache-kv-purger zones get example.com --account-id 01a7362d577a6c3019a474fd6f485823
+
+# With verbose output
+cache-kv-purger zones get example.com --verbose
+```
+
+### Configure Zone
+
+Sets a default zone for cache operations.
+
+```bash
+# Set default zone by domain name
+cache-kv-purger zones config --zone example.com
+
+# Set default zone by ID
+cache-kv-purger zones config --zone-id 01a7362d577a6c3019a474fd6f485823
+
+# Show current zone configuration
+cache-kv-purger zones config
+```
+
+## Future Enhancements
+
+The codebase contains supporting functions for several advanced operations that may be exposed as commands in future versions:
+
+1. **Bulk uploads**:
+   - Parallel processing with concurrent batch operations
+   - Optimal batch size and concurrency configuration
+
+2. **Cache tag management**:
+   - Tag-based purging with streaming approach
+   - Efficient handling of large namespaces
+
+3. **Metadata operations**:
+   - Metadata-only purging for improved performance
+   - High-throughput upfront loading
+
+4. **Data management**:
+   - Export functionality with metadata preservation
+   - Search operations with regex pattern matching
 
 ## Development
 
-### GitHub Workflows
-
-This project uses GitHub Actions for continuous integration and deployment:
-
-1. **Build and Test** - Runs on every push to `main` and on pull requests:
-   - Builds the project
-   - Runs all tests
-   - Performs linting with golangci-lint
-
-2. **Release** - Triggered when a new tag is pushed:
-   - Automatically builds binaries for multiple platforms (Linux, Windows, macOS)
-   - Creates GitHub releases with the built binaries
-   - Generates checksums for verification
-
-To create a new release:
+### Local Setup
 
 ```bash
+# Clone the repository
+git clone https://github.com/erfianugrah/cache-kv-purger.git
+cd cache-kv-purger
+
+# Install dependencies
+go mod download
+
+# Run tests
+go test ./...
+
+# Build the binary
+go build -o cache-kv-purger ./cmd/cache-kv-purger
+```
+
+### Code Quality
+
+To ensure code quality during development:
+
+```bash
+# Install golangci-lint (if not already installed)
+# Visit https://golangci-lint.run/usage/install/ for more installation options
+curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.55.2
+
+# Run the linter
+golangci-lint run ./...
+
+# Run the linter with specific configuration
+golangci-lint run --config .golangci.yml ./...
+
+# Fix auto-fixable issues
+golangci-lint run --fix ./...
+```
+
+The linter will check for:
+- Code style issues
+- Potential bugs
+- Performance issues
+- Unnecessary code
+- And many other quality concerns
+
+### Creating Releases
+
+The project uses GitHub Actions for continuous integration and deployment:
+
+```bash
+# Build and test workflow runs on push to main branch and pull requests
+git push origin main
+
+# Release workflow is triggered by new tags
 git tag v1.0.0
 git push origin v1.0.0
 ```
 
-### Contributing
-
-1. Fork the repository
-2. Create your feature branch: `git checkout -b feature/amazing-feature`
-3. Commit your changes: `git commit -m 'Add some amazing feature'`
-4. Push to the branch: `git push origin feature/amazing-feature`
-5. Open a Pull Request
-
-### Performance Testing
-
-When contributing performance improvements:
-
-1. Test with small, medium, and large data sets
-2. Use the `--verbose` flag to monitor progress and performance metrics
-3. Use `--dry-run` when testing purge operations to avoid accidental data loss
-4. Compare the performance of both legacy and optimized implementations
-5. Document performance gains with metrics in your PR
-
-## Command Reference
-
-### KV Commands
-
-| Command | Description | Usage |
-|---------|-------------|-------|
-| `namespace list` | List all KV namespaces | `kv namespace list` |
-| `namespace create` | Create a new namespace | `kv namespace create --title "Name"` |
-| `namespace delete` | Delete a namespace | `kv namespace delete --namespace-id ID` |
-| `namespace rename` | Rename a namespace | `kv namespace rename --namespace-id ID --title "New Name"` |
-| `namespace bulk-delete` | Delete multiple namespaces | `kv namespace bulk-delete --pattern "test-*"` |
-| `values list` | List keys in a namespace | `kv values list --namespace-id ID [--all]` |
-| `values get` | Get a value | `kv values get --namespace-id ID --key KEY` |
-| `values put` | Write a value | `kv values put --namespace-id ID --key KEY --value VAL` |
-| `values delete` | Delete a value | `kv values delete --namespace-id ID --key KEY` |
-| `get-with-metadata` | Get value with metadata | `kv get-with-metadata --namespace-id ID --key KEY` |
-| `exists` | Check if a key exists | `kv exists --namespace-id ID --key KEY` |
-| `export` | Export namespace to JSON | `kv export --namespace-id ID --file FILE.json` |
-| `search` | Search keys and values | `kv search --namespace-id ID --key-pattern PAT` |
-| `bulk-concurrent` | Upload data in concurrent batches | `kv bulk-concurrent --namespace-id ID --file FILE.json` |
-| `purge-by-metadata-only` | Purge by metadata efficiently | `kv purge-by-metadata-only --namespace-id ID --field F` |
-| `purge-by-metadata-upfront` | Purge with high throughput | `kv purge-by-metadata-upfront --namespace-id ID --field F` |
-| `purge-by-tag-streaming` | Purge by cache-tag | `kv purge-by-tag-streaming --namespace-id ID --tag-value V` |
-| `test-metadata` | Test metadata operations | `kv test-metadata --namespace-id ID --field F` |
-| `generate-test-data` | Generate test data | `kv generate-test-data --count 100 --output FILE.json` |
-
-### Cache Commands
-
-| Command | Description | Usage |
-|---------|-------------|-------|
-| `purge everything` | Purge entire cache | `cache purge everything --zone ZONE` |
-| `purge files` | Purge specific files | `cache purge files --zone ZONE --file URL` |
-| `purge tags` | Purge by cache tags | `cache purge tags --zone ZONE --tag TAG` |
-| `purge hosts` | Purge by hosts | `cache purge hosts --zone ZONE --host HOST` |
-| `purge prefixes` | Purge by URL prefixes | `cache purge prefixes --zone ZONE --prefix PREFIX` |
-
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
