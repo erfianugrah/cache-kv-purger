@@ -29,6 +29,7 @@ A command-line interface tool for managing Cloudflare cache purging and Workers 
   - Purge specific files
   - Purge by cache tags, hosts, or prefixes
   - Multi-zone purging support
+  - Batch processing for cache tag purging
 
 - **KV Store Management**
   - Create, list, rename, and delete namespaces
@@ -203,6 +204,84 @@ cache-kv-purger cache purge tags --zone example.com \
 cache-kv-purger cache purge tags --zone-id 01a7362d577a6c3019a474fd6f485823 \
   --tag product-listing \
   --verbose
+```
+
+### Purge Cache Tags in Batches
+
+Cloudflare limits tag purging to 30 tags per API call. This command automatically handles batch processing for larger tag sets.
+
+```bash
+# Purge a large number of tags using comma-delimited list (automatically batched in groups of 30)
+cache-kv-purger cache purge tags-batch --zone example.com \
+  --tags "product-tag-1,product-tag-2,product-tag-3,product-tag-4,product-tag-5"
+
+# You can also use multiple --tag flags if preferred
+cache-kv-purger cache purge tags-batch --zone example.com \
+  --tag product-tag-1 \
+  --tag product-tag-2 \
+  --tag product-tag-3
+
+# Purge the same set of tags across multiple zones
+cache-kv-purger cache purge tags-batch --zones example.com --zones example.org \
+  --tag product-tag-1 \
+  --tag product-tag-2 \
+  --tag product-tag-3
+
+# With verbose output for detailed progress
+cache-kv-purger cache purge tags-batch --zone example.com --tags-file tags.txt --verbose
+```
+
+#### Multiple File Formats for Tags
+
+The `tags-batch` command supports several file formats for providing tag lists:
+
+```bash
+# Text file format (one tag per line)
+cache-kv-purger cache purge tags-batch --zone example.com --tags-file tags.txt
+
+# CSV file format
+cache-kv-purger cache purge tags-batch --zone example.com --tags-file tags.csv --csv-column "tag_name"
+
+# JSON file format (array of strings)
+cache-kv-purger cache purge tags-batch --zone example.com --tags-file tags.json
+
+# JSON file format (array of objects)
+cache-kv-purger cache purge tags-batch --zone example.com --tags-file tags.json --json-field "name"
+```
+
+File format examples:
+
+**Text file (tags.txt):**
+```
+product-tag-1
+product-tag-2
+product-tag-3
+```
+
+**CSV file (tags.csv):**
+```csv
+tag_name,description,created_at
+product-tag-1,Description 1,2023-01-01
+product-tag-2,Description 2,2023-01-02
+product-tag-3,Description 3,2023-01-03
+```
+
+**JSON file - array of strings (tags.json):**
+```json
+[
+  "product-tag-1",
+  "product-tag-2",
+  "product-tag-3"
+]
+```
+
+**JSON file - array of objects (tags.json):**
+```json
+[
+  {"name": "product-tag-1", "description": "Description 1"},
+  {"name": "product-tag-2", "description": "Description 2"},
+  {"name": "product-tag-3", "description": "Description 3"}
+]
 ```
 
 ### Purge Hosts
