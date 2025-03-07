@@ -220,8 +220,9 @@ func createNamespaceCreateCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&kvFlagsVars.title, "title", "", "Title for the new namespace")
-	cmd.MarkFlagRequired("title")
-
+	if err := cmd.MarkFlagRequired("title"); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: Failed to mark 'title' flag as required: %v\n", err)
+	}
 	return cmd
 }
 
@@ -356,8 +357,12 @@ func createNamespaceRenameCmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&kvFlagsVars.namespaceID, "namespace-id", "", "ID of the namespace to rename")
 	cmd.Flags().StringVar(&kvFlagsVars.title, "title", "", "New title for the namespace")
-	cmd.MarkFlagRequired("namespace-id")
-	cmd.MarkFlagRequired("title")
+	if err := cmd.MarkFlagRequired("namespace-id"); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: Failed to mark 'namespace-id' flag as required: %v\n", err)
+	}
+	if err := cmd.MarkFlagRequired("title"); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: Failed to mark 'title' flag as required: %v\n", err)
+	}
 
 	return cmd
 }
@@ -468,8 +473,11 @@ func createNamespaceBulkDeleteCmd() *cobra.Command {
 			if !force {
 				fmt.Print("\nAre you sure you want to delete these namespaces? This action cannot be undone. [y/N]: ")
 				var confirm string
-				fmt.Scanln(&confirm)
-
+				if _, err := fmt.Scanln(&confirm); err != nil {
+					// Handle EOF or unexpected input errors gracefully
+					// For example, if user just presses Enter without input
+					confirm = "" // Default to empty to ensure it's not "y" or "Y"
+				}
 				if confirm != "y" && confirm != "Y" {
 					fmt.Println("Operation cancelled")
 					return nil
@@ -706,8 +714,9 @@ func createValuesGetCmd() *cobra.Command {
 	cmd.Flags().StringVar(&kvFlagsVars.namespaceID, "namespace-id", "", "ID of the namespace")
 	cmd.Flags().StringVar(&kvFlagsVars.title, "title", "", "Title of the namespace (alternative to namespace-id)")
 	cmd.Flags().StringVar(&kvFlagsVars.key, "key", "", "Key to get value for")
-	cmd.MarkFlagRequired("key")
-
+	if err := cmd.MarkFlagRequired("key"); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: Failed to mark 'key' flag as required: %v\n", err)
+	}
 	return cmd
 }
 
@@ -818,7 +827,9 @@ func createValuesPutCmd() *cobra.Command {
 	cmd.Flags().StringVar(&kvFlagsVars.value, "value", "", "Value to write")
 	cmd.Flags().StringVar(&kvFlagsVars.file, "file", "", "File to read value from (alternative to --value)")
 	cmd.Flags().Int64Var(&kvFlagsVars.expiration, "expiration", 0, "Expiration time (Unix timestamp)")
-	cmd.MarkFlagRequired("key")
+	if err := cmd.MarkFlagRequired("key"); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: Failed to mark 'key' flag as required: %v\n", err)
+	}
 
 	return cmd
 }
@@ -899,8 +910,9 @@ func createValuesDeleteCmd() *cobra.Command {
 	cmd.Flags().StringVar(&kvFlagsVars.namespaceID, "namespace-id", "", "ID of the namespace")
 	cmd.Flags().StringVar(&kvFlagsVars.title, "title", "", "Title of the namespace (alternative to namespace-id)")
 	cmd.Flags().StringVar(&kvFlagsVars.key, "key", "", "Key to delete value for")
-	cmd.MarkFlagRequired("key")
-
+	if err := cmd.MarkFlagRequired("key"); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: Failed to mark 'key' flag as required: %v\n", err)
+	}
 	return cmd
 }
 
@@ -1064,7 +1076,9 @@ func createGetKeyWithMetadataCmd() *cobra.Command {
 	cmd.Flags().StringVar(&kvFlagsVars.namespaceID, "namespace-id", "", "ID of the namespace")
 	cmd.Flags().StringVar(&kvFlagsVars.title, "title", "", "Title of the namespace (alternative to namespace-id)")
 	cmd.Flags().StringVar(&kvFlagsVars.key, "key", "", "Key to get")
-	cmd.MarkFlagRequired("key")
+	if err := cmd.MarkFlagRequired("key"); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: Failed to mark 'key' flag as required: %v\n", err)
+	}
 
 	return cmd
 }
@@ -1160,7 +1174,9 @@ func createKeyExistsCmd() *cobra.Command {
 	cmd.Flags().StringVar(&kvFlagsVars.namespaceID, "namespace-id", "", "ID of the namespace")
 	cmd.Flags().StringVar(&kvFlagsVars.title, "title", "", "Title of the namespace (alternative to namespace-id)")
 	cmd.Flags().StringVar(&kvFlagsVars.key, "key", "", "Key to check")
-	cmd.MarkFlagRequired("key")
+	if err := cmd.MarkFlagRequired("key"); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: Failed to mark 'key' flag as required: %v\n", err)
+	}
 
 	return cmd
 }

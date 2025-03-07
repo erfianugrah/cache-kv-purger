@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/url"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"cache-kv-purger/internal/api"
@@ -274,7 +273,8 @@ func FetchAllMetadata(client *api.Client, accountID, namespaceID string, keys []
 	var wg sync.WaitGroup
 
 	// Error tracking
-	errorCount := int32(0)
+	errorCount := 0
+	errorCountMutex := &sync.Mutex{}
 	var firstError error
 	var errorMutex sync.Mutex
 
@@ -306,7 +306,11 @@ func FetchAllMetadata(client *api.Client, accountID, namespaceID string, keys []
 				}
 
 				if err := json.Unmarshal(metadataResp, &metadataResponse); err != nil {
-					atomic.AddInt32(&errorCount, 1)
+					// Use mutex instead of atomic
+					errorCountMutex.Lock()
+					errorCount++
+					errorCountMutex.Unlock()
+
 					errorMutex.Lock()
 					if firstError == nil {
 						firstError = fmt.Errorf("error parsing metadata for key %s: %w", key.Key, err)
@@ -319,7 +323,7 @@ func FetchAllMetadata(client *api.Client, accountID, namespaceID string, keys []
 					continue // Skip unsuccessful responses
 				}
 
-				if metadataResponse.Result != nil && len(metadataResponse.Result) > 0 {
+				if len(metadataResponse.Result) > 0 {
 					// Store the metadata in our map
 					metadataObj := KeyValueMetadata(metadataResponse.Result)
 
@@ -353,7 +357,11 @@ func FetchAllMetadata(client *api.Client, accountID, namespaceID string, keys []
 	progressCallback(len(keys), len(keys))
 
 	// If we had too many errors, report the first one
-	if errorCount > int32(len(keys)/2) {
+	errorCountMutex.Lock()
+	tooManyErrors := errorCount > len(keys)/2
+	errorCountMutex.Unlock()
+
+	if tooManyErrors {
 		return metadataMap, firstError
 	}
 

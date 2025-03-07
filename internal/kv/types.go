@@ -22,7 +22,13 @@ type KeyName struct {
 
 // KeyValuesResponse represents a response containing multiple key-value pairs
 type KeyValuesResponse struct {
-	api.PaginatedResponse
+	Success    bool        `json:"success"`
+	Errors     []api.Error `json:"errors,omitempty"`
+	Messages   []string    `json:"messages,omitempty"`
+	ResultInfo struct {
+		Cursor string `json:"cursor"`
+		Count  int    `json:"count"`
+	} `json:"result_info"`
 	Result []KeyValuePair `json:"result"`
 }
 
@@ -70,8 +76,10 @@ type BulkWriteItem struct {
 
 // BulkWriteResult represents the result of a bulk write operation
 type BulkWriteResult struct {
-	api.APIResponse
-	Result struct {
+	Success  bool        `json:"success"`
+	Errors   []api.Error `json:"errors,omitempty"`
+	Messages []string    `json:"messages,omitempty"`
+	Result   struct {
 		SuccessCount int `json:"success_count"`
 		ErrorCount   int `json:"error_count"`
 		Errors       []struct {

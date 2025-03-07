@@ -82,7 +82,7 @@ func GetKeyWithMetadata(client *api.Client, accountID, namespaceID, key string) 
 		}
 
 		if err := json.Unmarshal(metadataRespBody, &metadataResponse); err == nil && metadataResponse.Success {
-			if metadataResponse.Result != nil && len(metadataResponse.Result) > 0 {
+			if len(metadataResponse.Result) > 0 {
 				metadataObj := KeyValueMetadata(metadataResponse.Result)
 				metadata = &metadataObj
 			}

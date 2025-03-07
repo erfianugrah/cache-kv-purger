@@ -18,14 +18,18 @@ type Namespace struct {
 
 // NamespaceResponse represents a response containing namespace information
 type NamespaceResponse struct {
-	api.APIResponse
-	Result Namespace `json:"result"`
+	Success  bool        `json:"success"`
+	Errors   []api.Error `json:"errors,omitempty"`
+	Messages []string    `json:"messages,omitempty"`
+	Result   Namespace   `json:"result"`
 }
 
 // NamespacesResponse represents a response containing multiple namespaces
 type NamespacesResponse struct {
-	api.APIResponse
-	Result []Namespace `json:"result"`
+	Success  bool        `json:"success"`
+	Errors   []api.Error `json:"errors,omitempty"`
+	Messages []string    `json:"messages,omitempty"`
+	Result   []Namespace `json:"result"`
 }
 
 // ListNamespaces lists all KV namespaces for an account
@@ -35,7 +39,7 @@ func ListNamespaces(client *api.Client, accountID string) ([]Namespace, error) {
 	}
 
 	path := fmt.Sprintf("/accounts/%s/storage/kv/namespaces", accountID)
-	
+
 	respBody, err := client.Request(http.MethodGet, path, nil, nil)
 	if err != nil {
 		return nil, err
@@ -67,7 +71,7 @@ func GetNamespace(client *api.Client, accountID, namespaceID string) (*Namespace
 	}
 
 	path := fmt.Sprintf("/accounts/%s/storage/kv/namespaces/%s", accountID, namespaceID)
-	
+
 	respBody, err := client.Request(http.MethodGet, path, nil, nil)
 	if err != nil {
 		return nil, err
@@ -99,11 +103,11 @@ func CreateNamespace(client *api.Client, accountID, title string) (*Namespace, e
 	}
 
 	path := fmt.Sprintf("/accounts/%s/storage/kv/namespaces", accountID)
-	
+
 	requestBody := map[string]string{
 		"title": title,
 	}
-	
+
 	respBody, err := client.Request(http.MethodPost, path, nil, requestBody)
 	if err != nil {
 		return nil, err
@@ -135,7 +139,7 @@ func DeleteNamespace(client *api.Client, accountID, namespaceID string) error {
 	}
 
 	path := fmt.Sprintf("/accounts/%s/storage/kv/namespaces/%s", accountID, namespaceID)
-	
+
 	respBody, err := client.Request(http.MethodDelete, path, nil, nil)
 	if err != nil {
 		return err
@@ -220,7 +224,7 @@ func DeleteMultipleNamespacesWithProgress(client *api.Client, accountID string, 
 	for i, nsID := range namespaceIDs {
 		if nsID == "" {
 			errors = append(errors, fmt.Errorf("empty namespace ID provided"))
-			
+
 			if progressCallback != nil {
 				progressCallback(i+1, totalCount, len(successIDs), len(errors))
 			}
@@ -233,7 +237,7 @@ func DeleteMultipleNamespacesWithProgress(client *api.Client, accountID string, 
 		} else {
 			successIDs = append(successIDs, nsID)
 		}
-		
+
 		if progressCallback != nil {
 			progressCallback(i+1, totalCount, len(successIDs), len(errors))
 		}
@@ -292,11 +296,11 @@ func RenameNamespace(client *api.Client, accountID, namespaceID, newTitle string
 	}
 
 	path := fmt.Sprintf("/accounts/%s/storage/kv/namespaces/%s", accountID, namespaceID)
-	
+
 	requestBody := map[string]string{
 		"title": newTitle,
 	}
-	
+
 	respBody, err := client.Request(http.MethodPut, path, nil, requestBody)
 	if err != nil {
 		return nil, err
