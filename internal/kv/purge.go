@@ -65,7 +65,7 @@ func StreamingFilterKeysByMetadata(client *api.Client, accountID, namespaceID, m
 		chunkKeys := keys[i:end]
 
 		// Process this chunk
-		matchedKeys, err := processMetadataOnlyChunk(client, accountID, namespaceID, chunkKeys,
+		matchedKeynames, err := processMetadataOnlyChunk(client, accountID, namespaceID, chunkKeys,
 			metadataField, metadataValue, func(processed int) {
 				totalProcessed = i + processed
 				progressCallback(totalKeys, totalProcessed, len(allMatchedKeys), totalKeys)
@@ -76,12 +76,29 @@ func StreamingFilterKeysByMetadata(client *api.Client, accountID, namespaceID, m
 		}
 
 		// Get full key-value pairs for matched keys
-		for _, keyName := range matchedKeys {
-			kvPair, err := GetKeyWithMetadata(client, accountID, namespaceID, keyName)
-			if err != nil {
-				continue
+		for _, keyName := range matchedKeynames {
+			// Try to find the original key in our chunk to preserve metadata
+			var matchedKey *KeyValuePair
+			for _, key := range chunkKeys {
+				if key.Key == keyName {
+					keyCopy := key // Make a copy to avoid slice reference issues
+					matchedKey = &keyCopy
+					break
+				}
 			}
-			allMatchedKeys = append(allMatchedKeys, *kvPair)
+
+			// If we found the key with metadata in our chunk, use it directly
+			if matchedKey != nil {
+				allMatchedKeys = append(allMatchedKeys, *matchedKey)
+			} else {
+				// Otherwise get the key with metadata (fallback, should rarely happen)
+				kvPair, err := GetKeyWithMetadata(client, accountID, namespaceID, keyName)
+				if err != nil {
+					// Just log and continue if we can't get full details for this key
+					continue
+				}
+				allMatchedKeys = append(allMatchedKeys, *kvPair)
+			}
 		}
 
 		// Update progress
@@ -265,40 +282,71 @@ func PurgeByMetadataUpfront(client *api.Client, accountID, namespaceID, metadata
 
 	totalKeys := len(keys)
 
-	// Fetch all metadata upfront with high concurrency for maximum throughput
-	metadataProgress := func(fetched, total int) {
-		progressCallback(totalKeys, fetched, 0, 0, total)
-	}
-
-	allMetadata, err := FetchAllMetadata(client, accountID, namespaceID, keys, concurrency, metadataProgress)
-	if err != nil {
-		return 0, fmt.Errorf("failed to fetch metadata: %w", err)
-	}
-
-	// Process all keys in memory now that we have all metadata
+	// Process all keys in memory using metadata from list response when available
 	var matchingKeys []string
 
 	for _, key := range keys {
-		// Find metadata for this key
-		metadata, exists := allMetadata[key.Key]
-		if !exists {
-			continue // No metadata for this key
-		}
-
-		// Check if the field exists and matches the value
-		fieldValue, exists := (*metadata)[metadataField]
-		if !exists {
-			continue // Field doesn't exist
-		}
-
-		// Check if the field value matches (empty value matches anything)
-		fieldValueStr := fmt.Sprintf("%v", fieldValue)
-		if metadataValue == "" || fieldValueStr == metadataValue {
-			matchingKeys = append(matchingKeys, key.Key)
+		// First check if metadata is already available in the response
+		if key.Metadata != nil {
+			// Check if the field exists and matches the value
+			fieldValue, exists := (*key.Metadata)[metadataField]
+			if exists {
+				// Check if the field value matches (empty value matches anything)
+				fieldValueStr := fmt.Sprintf("%v", fieldValue)
+				if metadataValue == "" || fieldValueStr == metadataValue {
+					matchingKeys = append(matchingKeys, key.Key)
+				}
+			}
 		}
 
 		// Update progress
 		progressCallback(totalKeys, totalKeys, len(matchingKeys), 0, totalKeys)
+	}
+
+	// If we still need to check keys without metadata, use FetchAllMetadata for remaining keys
+	// This is an optimization when list response doesn't include metadata
+	if len(matchingKeys) == 0 {
+		// Fetch metadata for keys without metadata in response
+		var keysNeedingMetadata []KeyValuePair
+		for _, key := range keys {
+			if key.Metadata == nil {
+				keysNeedingMetadata = append(keysNeedingMetadata, key)
+			}
+		}
+
+		if len(keysNeedingMetadata) > 0 {
+			metadataProgress := func(fetched, total int) {
+				progressCallback(totalKeys, totalKeys, len(matchingKeys)+fetched/2, 0, total)
+			}
+
+			// Use the FetchAllMetadata from export.go
+			allMetadata, err := FetchAllMetadata(client, accountID, namespaceID, keysNeedingMetadata, concurrency, metadataProgress)
+			if err != nil {
+				// Continue with the keys we already matched from the list response
+				// Just log the error as this is a fallback mechanism
+				fmt.Printf("Warning: Failed to fetch additional metadata: %v\n", err)
+			} else {
+				// Check additional keys with fetched metadata
+				for _, key := range keysNeedingMetadata {
+					metadata, exists := allMetadata[key.Key]
+					if !exists {
+						continue // No metadata for this key
+					}
+
+					// Check if the field exists and matches the value
+					fieldValue, exists := (*metadata)[metadataField]
+					if !exists {
+						continue // Field doesn't exist
+					}
+
+					// Check if the field value matches (empty value matches anything)
+					fieldValueStr := fmt.Sprintf("%v", fieldValue)
+					if metadataValue == "" || fieldValueStr == metadataValue {
+						matchingKeys = append(matchingKeys, key.Key)
+					}
+				}
+			}
+		}
 	}
 
 	// If dry run, just return the count
@@ -489,9 +537,79 @@ func processMetadataOnlyChunk(client *api.Client, accountID, namespaceID string,
 	progressCallback func(processed int)) ([]string, error) {
 
 	// Create a mutex for thread safety
-	clientMutex := &sync.Mutex{}
+	var mu sync.Mutex
+	matchedKeys := []string{}
+	processed := 0
 
-	// Create channels for workers
+	// Process each key in the chunk checking for metadata
+	for _, key := range chunkKeys {
+		processed++
+
+		// Report progress
+		progressCallback(processed)
+
+		// First check if key already has metadata from the list response
+		if key.Metadata != nil {
+			// Check if metadata contains our field
+			if fieldValue, ok := (*key.Metadata)[metadataField]; ok {
+				// We found the field in metadata!
+				fieldStr, isString := fieldValue.(string)
+				if isString && (metadataValue == "" || fieldStr == metadataValue) {
+					mu.Lock()
+					matchedKeys = append(matchedKeys, key.Key)
+					mu.Unlock()
+				}
+				continue // Already checked metadata, no need for API call
+			}
+		}
+
+		// If we get here, metadata was not in the list response or didn't have our field
+		// Fall back to making an API call for this key's metadata
+		encodedKey := url.PathEscape(key.Key)
+		metadataPath := fmt.Sprintf("/accounts/%s/storage/kv/namespaces/%s/metadata/%s",
+			accountID, namespaceID, encodedKey)
+
+		// Get metadata
+		metadataResp, metadataErr := client.Request(http.MethodGet, metadataPath, nil, nil)
+
+		// If we got metadata and it contains our field, check it
+		if metadataErr == nil {
+			var metadataResponse struct {
+				Success bool                   `json:"success"`
+				Result  map[string]interface{} `json:"result"`
+			}
+
+			if err := json.Unmarshal(metadataResp, &metadataResponse); err == nil &&
+				metadataResponse.Success && metadataResponse.Result != nil {
+
+				// Check if metadata has our field
+				if fieldValue, ok := metadataResponse.Result[metadataField]; ok {
+					// We found the field in metadata!
+					fieldStr, isString := fieldValue.(string)
+					if isString && (metadataValue == "" || fieldStr == metadataValue) {
+						mu.Lock()
+						matchedKeys = append(matchedKeys, key.Key)
+						mu.Unlock()
+					}
+				}
+			}
+		}
+	}
+
+	return matchedKeys, nil
+}
+
+// processKeyChunkOptimized uses a more efficient approach to process keys
+// It checks metadata first where available to reduce API calls
+func processKeyChunkOptimized(client *api.Client, accountID, namespaceID string,
+	chunkKeys []KeyValuePair, tagField, tagValue string, concurrency int,
+	progressCallback func(processed int)) ([]string, error) {
+
+	// Create a mutex for thread safety
+	var mu sync.Mutex
+	matchedKeys := []string{}
+
+	// Create worker pool for parallel processing
 	workChan := make(chan KeyValuePair, len(chunkKeys))
 	resultChan := make(chan struct {
 		key       string
@@ -499,37 +617,50 @@ func processMetadataOnlyChunk(client *api.Client, accountID, namespaceID string,
 		processed bool
 	}, len(chunkKeys))
 
-	// Use extremely high concurrency - Cloudflare's API seems to be rate limiting, so we'll try to max out our requests
-	// Process all keys in parallel for maximum throughput
-	concurrency := len(chunkKeys) // Process every key in its own goroutine for maximum parallelism
-	if concurrency > 1000 {       // But cap at 1000 to avoid system resource issues
-		concurrency = 1000
-	}
-
 	// Launch worker goroutines
 	var wg sync.WaitGroup
 	for i := 0; i < concurrency; i++ {
 		wg.Add(1)
-		go func(workerNum int) {
+		go func() {
 			defer wg.Done()
 
 			for key := range workChan {
-				// No delay needed - Cloudflare API can handle high concurrency
-				// Removing this delay dramatically improves performance
+				var matches bool
 
-				// Check only metadata for this key (much faster)
+				// First check if metadata is already in the list response
+				if key.Metadata != nil {
+					// Check if metadata has our tag field
+					if fieldValue, ok := (*key.Metadata)[tagField]; ok {
+						// We found the field in metadata!
+						foundTagStr, isString := fieldValue.(string)
+						if isString && (tagValue == "" || foundTagStr == tagValue) {
+							matches = true
+						}
+
+						// Report result - we found metadata in the list response
+						resultChan <- struct {
+							key       string
+							matches   bool
+							processed bool
+						}{
+							key:       key.Key,
+							matches:   matches,
+							processed: true,
+						}
+						continue
+					}
+				}
+
+				// If metadata wasn't in list response or didn't have our field,
+				// try a separate API call for metadata
 				encodedKey := url.PathEscape(key.Key)
 				metadataPath := fmt.Sprintf("/accounts/%s/storage/kv/namespaces/%s/metadata/%s",
 					accountID, namespaceID, encodedKey)
 
-				// Get metadata with thread safety
-				clientMutex.Lock()
+				// Get metadata
 				metadataResp, metadataErr := client.Request(http.MethodGet, metadataPath, nil, nil)
-				clientMutex.Unlock()
 
-				var matches bool
-
-				// If we got metadata and it contains our field, check it
+				// If we got metadata and it contains our tag field, check it
 				if metadataErr == nil {
 					var metadataResponse struct {
 						Success bool                   `json:"success"`
@@ -539,14 +670,71 @@ func processMetadataOnlyChunk(client *api.Client, accountID, namespaceID string,
 					if err := json.Unmarshal(metadataResp, &metadataResponse); err == nil &&
 						metadataResponse.Success && metadataResponse.Result != nil {
 
-						// Check if metadata has our field
-						if fieldValue, ok := metadataResponse.Result[metadataField]; ok {
+						// Check if metadata has our tag field
+						if fieldValue, ok := metadataResponse.Result[tagField]; ok {
 							// We found the field in metadata!
-							fieldStr, isString := fieldValue.(string)
-							if isString && (metadataValue == "" || fieldStr == metadataValue) {
+							foundTagStr, isString := fieldValue.(string)
+							if isString && (tagValue == "" || foundTagStr == tagValue) {
 								matches = true
 							}
+
+							// Report result - we don't need to check the value if we found metadata
+							resultChan <- struct {
+								key       string
+								matches   bool
+								processed bool
+							}{
+								key:       key.Key,
+								matches:   matches,
+								processed: true,
+							}
+							continue
 						}
+					}
+				}
+
+				// If we still didn't find metadata, fall back to getting the value
+				// Add a small delay to avoid rate limiting
+				time.Sleep(time.Duration(10) * time.Millisecond)
+
+				// Get the value
+				value, err := GetValue(client, accountID, namespaceID, key.Key)
+				if err != nil {
+					// Report as processed but not matched
+					resultChan <- struct {
+						key       string
+						matches   bool
+						processed bool
+					}{
+						key:       key.Key,
+						matches:   false,
+						processed: true,
+					}
+					continue
+				}
+
+				// Try to parse the value as JSON
+				var valueMap map[string]interface{}
+				if err := json.Unmarshal([]byte(value), &valueMap); err != nil {
+					// Not valid JSON, report as processed but not matched
+					resultChan <- struct {
+						key       string
+						matches   bool
+						processed bool
+					}{
+						key:       key.Key,
+						matches:   false,
+						processed: true,
+					}
+					continue
+				}
+
+				// Check if the tag field exists and matches
+				if foundTagValue, ok := valueMap[tagField]; ok {
+					// Convert tag value to string
+					if foundTagStr, ok := foundTagValue.(string); ok {
+						// Check if tag value matches (if tagValue is empty, match any tag)
+						matches = tagValue == "" || foundTagStr == tagValue
 					}
 				}
 
@@ -561,7 +749,7 @@ func processMetadataOnlyChunk(client *api.Client, accountID, namespaceID string,
 					processed: true,
 				}
 			}
-		}(i)
+		}()
 	}
 
 	// Feed keys to workers
@@ -573,227 +761,6 @@ func processMetadataOnlyChunk(client *api.Client, accountID, namespaceID string,
 	}()
 
 	// Collect results
-	matchedKeys := []string{}
-	processed := 0
-
-	for processed < len(chunkKeys) {
-		result := <-resultChan
-		processed++
-
-		// Report progress for every key for better responsiveness
-		progressCallback(processed)
-
-		// Add matched key to results
-		if result.matches {
-			matchedKeys = append(matchedKeys, result.key)
-		}
-	}
-
-	// Wait for all workers to finish
-	wg.Wait()
-
-	return matchedKeys, nil
-}
-
-// processKeyChunkOptimized uses a more efficient approach to process keys
-// It checks metadata first where available to reduce API calls
-func processKeyChunkOptimized(client *api.Client, accountID, namespaceID string,
-	chunkKeys []KeyValuePair, tagField, tagValue string, concurrency int,
-	progressCallback func(processed int)) ([]string, error) {
-
-	// Create worker pool for parallel processing, but with a more optimized approach
-	workChan := make(chan KeyValuePair, len(chunkKeys))
-	resultChan := make(chan struct {
-		key       string
-		matches   bool
-		processed bool
-	}, len(chunkKeys))
-
-	// Create mutex for client to ensure thread safety
-	clientMutex := &sync.Mutex{}
-
-	// Launch worker goroutines
-	var wg sync.WaitGroup
-	for i := 0; i < concurrency; i++ {
-		wg.Add(1)
-		go func(workerNum int) {
-			defer wg.Done()
-
-			// Create a local batch to reduce API calls
-			keyBatch := make([]KeyValuePair, 0, 10)
-			batchSize := 10
-
-			for key := range workChan {
-				// Add to batch
-				keyBatch = append(keyBatch, key)
-
-				// Process batch when it reaches the batch size
-				if len(keyBatch) >= batchSize {
-					// Process the batch
-					for _, batchKey := range keyBatch {
-						// Try metadata first if the tag is in metadata (it's usually a faster API call)
-						// Note: We still need to use individual Get calls because Cloudflare KV doesn't have bulk read
-
-						// First try to check metadata, which is often faster
-						encodedKey := url.PathEscape(batchKey.Key)
-						metadataPath := fmt.Sprintf("/accounts/%s/storage/kv/namespaces/%s/metadata/%s",
-							accountID, namespaceID, encodedKey)
-
-						// Get metadata with thread safety
-						clientMutex.Lock()
-						metadataResp, metadataErr := client.Request(http.MethodGet, metadataPath, nil, nil)
-						clientMutex.Unlock()
-
-						var matches bool
-
-						// If we got metadata and it contains our tag field, check it
-						if metadataErr == nil {
-							var metadataResponse struct {
-								Success bool                   `json:"success"`
-								Result  map[string]interface{} `json:"result"`
-							}
-
-							if err := json.Unmarshal(metadataResp, &metadataResponse); err == nil &&
-								metadataResponse.Success && metadataResponse.Result != nil {
-
-								// Check if metadata has our tag field
-								if fieldValue, ok := metadataResponse.Result[tagField]; ok {
-									// We found the field in metadata!
-									foundTagStr, isString := fieldValue.(string)
-									if isString && (tagValue == "" || foundTagStr == tagValue) {
-										matches = true
-									}
-
-									// Report result - we don't need to check the value if we already have a match
-									resultChan <- struct {
-										key       string
-										matches   bool
-										processed bool
-									}{
-										key:       batchKey.Key,
-										matches:   matches,
-										processed: true,
-									}
-									continue
-								}
-							}
-						}
-
-						// If metadata approach didn't work, fall back to getting the value
-						// Add a small delay to avoid rate limiting
-						time.Sleep(time.Duration(10) * time.Millisecond)
-
-						// Get the value with thread safety
-						clientMutex.Lock()
-						value, err := GetValue(client, accountID, namespaceID, batchKey.Key)
-						clientMutex.Unlock()
-
-						if err != nil {
-							// Report as processed but not matched
-							resultChan <- struct {
-								key       string
-								matches   bool
-								processed bool
-							}{
-								key:       batchKey.Key,
-								matches:   false,
-								processed: true,
-							}
-							continue
-						}
-
-						// Try to parse the value as JSON
-						var valueMap map[string]interface{}
-						if err := json.Unmarshal([]byte(value), &valueMap); err != nil {
-							// Not valid JSON, report as processed but not matched
-							resultChan <- struct {
-								key       string
-								matches   bool
-								processed bool
-							}{
-								key:       batchKey.Key,
-								matches:   false,
-								processed: true,
-							}
-							continue
-						}
-
-						// Check if the tag field exists and matches
-						if foundTagValue, ok := valueMap[tagField]; ok {
-							// Convert tag value to string
-							if foundTagStr, ok := foundTagValue.(string); ok {
-								// Check if tag value matches (if tagValue is empty, match any tag)
-								matches = tagValue == "" || foundTagStr == tagValue
-							}
-						}
-
-						// Report result
-						resultChan <- struct {
-							key       string
-							matches   bool
-							processed bool
-						}{
-							key:       batchKey.Key,
-							matches:   matches,
-							processed: true,
-						}
-					}
-
-					// Clear batch
-					keyBatch = keyBatch[:0]
-				}
-			}
-
-			// Process any remaining keys in the batch after channel is closed
-			if len(keyBatch) > 0 {
-				for _, batchKey := range keyBatch {
-					// Get the value with thread safety
-					clientMutex.Lock()
-					value, err := GetValue(client, accountID, namespaceID, batchKey.Key)
-					clientMutex.Unlock()
-
-					var matches bool
-
-					if err == nil {
-						// Try to parse the value as JSON
-						var valueMap map[string]interface{}
-						if err := json.Unmarshal([]byte(value), &valueMap); err == nil {
-							// Check if the tag field exists and matches
-							if foundTagValue, ok := valueMap[tagField]; ok {
-								// Convert tag value to string
-								if foundTagStr, ok := foundTagValue.(string); ok {
-									// Check if tag value matches (if tagValue is empty, match any tag)
-									matches = tagValue == "" || foundTagStr == tagValue
-								}
-							}
-						}
-					}
-
-					// Report result
-					resultChan <- struct {
-						key       string
-						matches   bool
-						processed bool
-					}{
-						key:       batchKey.Key,
-						matches:   matches,
-						processed: true,
-					}
-				}
-			}
-		}(i)
-	}
-
-	// Feed keys to workers
-	go func() {
-		for _, key := range chunkKeys {
-			workChan <- key
-		}
-		close(workChan)
-	}()
-
-	// Collect results
-	matchedKeys := []string{}
 	processed := 0
 
 	for processed < len(chunkKeys) {
@@ -807,7 +774,9 @@ func processKeyChunkOptimized(client *api.Client, accountID, namespaceID string,
 
 		// Add matched key to results
 		if result.matches {
+			mu.Lock()
 			matchedKeys = append(matchedKeys, result.key)
+			mu.Unlock()
 		}
 	}
 
@@ -816,3 +785,5 @@ func processKeyChunkOptimized(client *api.Client, accountID, namespaceID string,
 
 	return matchedKeys, nil
 }
+
+// Note: FetchAllMetadata function is defined in export.go and not duplicated here
