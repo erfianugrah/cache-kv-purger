@@ -110,6 +110,27 @@ export CLOUDFLARE_ACCOUNT_ID=your_account_id
 export CLOUDFLARE_ZONE_ID=your_zone_id
 ```
 
+#### Advanced Environment Variables
+
+The tool supports these additional environment variables for customizing behavior:
+
+```bash
+# API request timeout in seconds (default: 60)
+export CLOUDFLARE_API_TIMEOUT=120
+
+# Maximum concurrent requests for batch operations (default varies by operation)
+export CLOUDFLARE_MAX_CONCURRENCY=30
+
+# Default batch size for operations (default varies by operation)
+export CLOUDFLARE_BATCH_SIZE=500
+
+# Retry count for failed API requests (default: 3)
+export CLOUDFLARE_RETRY_COUNT=5
+
+# Base backoff delay in milliseconds for retries (default: 1000)
+export CLOUDFLARE_BACKOFF_DELAY=2000
+```
+
 #### Using Config Command
 
 ```bash
@@ -122,9 +143,23 @@ cache-kv-purger config set-defaults --account-id your_account_id
 # Set custom API endpoint (if needed)
 cache-kv-purger config set-defaults --api-endpoint https://custom-api.cloudflare.com/client/v4
 
+# Set default request timeout
+cache-kv-purger config set-defaults --timeout 120
+
+# Set default batch parameters
+cache-kv-purger config set-defaults --batch-size 250 --concurrency 20
+
 # View current configuration
 cache-kv-purger config show
 ```
+
+#### Configuration Precedence
+
+The tool prioritizes configuration sources in the following order:
+1. Command-line flags (highest priority)
+2. Environment variables 
+3. Configuration file (created with `config set-defaults`)
+4. Built-in defaults (lowest priority)
 
 ## Global Commands
 
@@ -574,6 +609,12 @@ cache-kv-purger kv values list --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 -
 
 # With verbose output
 cache-kv-purger kv values list --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --all --verbose
+
+# Filter keys by prefix
+cache-kv-purger kv values list --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --prefix "product-" --all
+
+# List keys with pagination control
+cache-kv-purger kv values list --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --page-size 1000 --page 2
 ```
 
 ### Get Value
@@ -613,6 +654,12 @@ cache-kv-purger kv values put --account-id 01a7362d577a6c3019a474fd6f485823 --ti
 
 # With expiration time (Unix timestamp)
 cache-kv-purger kv values put --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --key temporary-key --value "Temporary data" --expiration 1735689600
+
+# With expiration in seconds from now (TTL)
+cache-kv-purger kv values put --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --key temporary-key --value "Temporary data" --expiration-ttl 3600
+
+# With custom metadata (as JSON)
+cache-kv-purger kv values put --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --key product-123 --value '{"name":"Product 123"}' --metadata '{"cache-tag":"products", "version":"1.0"}'
 
 # With verbose output
 cache-kv-purger kv values put --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --key mykey --value "My value data" --verbose
@@ -693,6 +740,91 @@ cache-kv-purger kv config --account-id 01a7362d577a6c3019a474fd6f485823
 cache-kv-purger kv config
 ```
 
+### Bulk Operations
+
+The tool supports efficient bulk operations for managing large volumes of key-value pairs.
+
+#### Bulk Write
+
+Writes multiple key-value pairs in a single operation or in optimized batches.
+
+```bash
+# Write multiple key-value pairs from a JSON file
+cache-kv-purger kv bulk-write --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --file data.json
+
+# Write with custom batch size and concurrency
+cache-kv-purger kv bulk-write --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --file data.json --batch-size 100 --concurrency 20
+
+# With metadata for all keys in the batch
+cache-kv-purger kv bulk-write --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --file data.json --metadata '{"source":"import-job", "timestamp":"2023-06-01"}'
+
+# With expiration TTL for all keys in the batch
+cache-kv-purger kv bulk-write --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --file data.json --expiration-ttl 86400
+```
+
+Format of the JSON file for bulk writes:
+```json
+[
+  {
+    "key": "product-1",
+    "value": "Product 1 data",
+    "metadata": {
+      "cache-tag": "products",
+      "category": "electronics"
+    },
+    "expiration": 1735689600
+  },
+  {
+    "key": "product-2",
+    "value": "Product 2 data",
+    "metadata": {
+      "cache-tag": "products",
+      "category": "clothing"
+    },
+    "expiration_ttl": 86400
+  }
+]
+```
+
+#### Bulk Delete
+
+Deletes multiple keys in optimized batches.
+
+```bash
+# Delete keys from a text file (one key per line)
+cache-kv-purger kv bulk-delete --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --keys-file keys-to-delete.txt
+
+# Delete keys matching a prefix
+cache-kv-purger kv bulk-delete --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --prefix "temp-"
+
+# Delete with custom batch size and concurrency
+cache-kv-purger kv bulk-delete --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --keys-file keys-to-delete.txt --batch-size 1000 --concurrency 10
+
+# Delete keys by metadata tag (keys with metadata containing specific tag value)
+cache-kv-purger kv bulk-delete --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --metadata-field "cache-tag" --metadata-value "products-old"
+
+# Dry run (show what would be deleted without actually deleting)
+cache-kv-purger kv bulk-delete --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --prefix "temp-" --dry-run
+```
+
+#### Export and Import
+
+These commands help with backing up and restoring KV data across environments.
+
+```bash
+# Export entire namespace with metadata to a file
+cache-kv-purger kv export --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --output namespace-backup.json
+
+# Export with filtering
+cache-kv-purger kv export --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --prefix "config-" --output config-backup.json
+
+# Import from backup file
+cache-kv-purger kv import --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --file namespace-backup.json
+
+# Import with custom concurrency
+cache-kv-purger kv import --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --file namespace-backup.json --concurrency 20
+```
+
 ## Zone Commands
 
 ### List Zones
@@ -740,25 +872,105 @@ cache-kv-purger zones config --zone-id 01a7362d577a6c3019a474fd6f485823
 cache-kv-purger zones config
 ```
 
+## Advanced Features
+
+The tool includes several advanced features for optimizing performance and handling large-scale operations:
+
+### Performance Optimization
+
+#### Batch Processing
+- **KV Write Operations**: Optimizes performance with concurrent batch operations
+  - Default batch size: 100 items per batch
+  - Maximum batch size: 10,000 items per API call
+  - Default concurrency: 10 parallel requests
+  - Maximum recommended concurrency: 50 parallel requests
+
+- **Cache Purge Operations**: For efficient purging of large sets
+  - Default batch size for tags: 30 tags per request (Cloudflare limit)
+  - Default batch size for URLs: 30 URLs per request
+  - Uses parallelism to maximize throughput while respecting API limits
+
+#### Cross-Zone Operations
+- **Multi-Zone Purging**: For purging the same content across multiple zones
+  - Default zone concurrency: 3 zones processed in parallel
+  - Automatically distributes files to appropriate zones based on hostname
+  - Optimizes API calls to minimize rate limit impacts
+
+#### Metadata-Only Operations
+- **Efficient KV Operations**: The tool can perform metadata-only operations that avoid retrieving values
+  - Faster performance for purge-by-tag and metadata filtering operations
+  - Supports upfront metadata loading for large namespaces to reduce API calls
+
+### API Behavior and Limitations
+
+#### Rate Limit Handling
+- The tool automatically handles Cloudflare API rate limits through:
+  - Smart batching of large operations
+  - Concurrent request throttling
+  - Error handling with informative messages
+
+#### Cloudflare API Limits
+- Cache tag purging: Maximum 30 tags per API call
+- KV bulk operations: Maximum 10,000 items per API call
+- KV namespace listing: Paginated in sets of 100 namespaces
+- Cache purging: Rate limited to approximately 1,000 purges per hour
+
+#### Partial Success Handling
+For batch operations that partially succeed, the tool reports:
+- Number of successful items
+- Errors for failed batches
+- With `--verbose`, detailed information about each batch
+
+### Troubleshooting
+
+#### Common Issues
+- **Rate Limit Exceeded**: Reduce concurrency or batch size, or add delays between operations
+- **Authentication Failures**: Verify your API token has the correct permissions
+- **Zone Not Found**: Ensure the zone ID or domain name is correct and belongs to your account
+
+#### Improving Performance
+- For very large KV namespaces (>100,000 keys), use pagination options
+- For bulk uploads of >1 million items, consider splitting into multiple operations
+- When purging thousands of cache items, use the batch operations with appropriate batch sizes
+
+#### Error Handling and Recovery
+
+The tool implements sophisticated error handling for large operations:
+
+- **Partial Success**: For batch operations, the tool reports how many items succeeded before failure
+- **Resumable Operations**: Failed batch operations can be resumed by skipping already processed items
+- **Rate Limit Recovery**: The tool automatically implements backoff strategies when rate limits are hit
+- **Detailed Error Messages**: With `--verbose`, you get specific error details for troubleshooting
+
+**Example of Resuming a Failed Bulk Operation**:
+```bash
+# Original command that processed 5000 items before hitting an error
+cache-kv-purger kv bulk-delete --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --keys-file all-keys.txt --verbose
+
+# Resume by skipping the first 5000 items
+cache-kv-purger kv bulk-delete --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --keys-file all-keys.txt --skip 5000 --verbose
+```
+
 ## Future Enhancements
 
-The codebase contains supporting functions for several advanced operations that may be exposed as commands in future versions:
+The codebase contains supporting functions for several advanced operations that may be exposed as additional commands in future versions:
 
 1. **Bulk uploads**:
-   - Parallel processing with concurrent batch operations
-   - Optimal batch size and concurrency configuration
+   - Additional export/import formats
+   - Enhanced concurrency models
 
 2. **Cache tag management**:
-   - Tag-based purging with streaming approach
-   - Efficient handling of large namespaces
+   - Tag-based purging with advanced filtering
+   - Custom scheduling for recurring purges
 
 3. **Metadata operations**:
-   - Metadata-only purging for improved performance
-   - High-throughput upfront loading
+   - Advanced metadata search and filtering
+   - Bulk metadata updates without value changes
 
 4. **Data management**:
-   - Export functionality with metadata preservation
+   - Improved export functionality with metadata preservation
    - Search operations with regex pattern matching
+   - Cross-namespace operations
 
 ## Development
 
