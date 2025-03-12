@@ -88,6 +88,23 @@ The tool uses Cloudflare API credentials for authentication.
 export CLOUDFLARE_API_TOKEN=your_cloudflare_api_token
 ```
 
+#### Required API Token Permissions
+
+When creating your Cloudflare API token, make sure to include the following permissions:
+
+**For Cache Operations:**
+- Zone > Cache Purge > Purge
+
+**For KV Operations:**
+- Account > Workers KV Storage > Edit
+- Account > Workers KV Storage > Read
+
+**For Zone Operations:**
+- Zone > Zone > Read
+- Zone > Zone Settings > Read
+
+Without these permissions, certain commands may fail with authorization errors. You can create different tokens with specific permissions if you only need to use a subset of the functionality.
+
 ### API Key (Legacy)
 
 ```bash
@@ -121,6 +138,12 @@ export CLOUDFLARE_API_TIMEOUT=120
 # Maximum concurrent requests for batch operations (default varies by operation)
 export CLOUDFLARE_MAX_CONCURRENCY=30
 
+# Cache purge concurrency (default: 10, max: 20)
+export CLOUDFLARE_CACHE_CONCURRENCY=15
+
+# Multi-zone concurrent operations (default: 3)
+export CLOUDFLARE_MULTI_ZONE_CONCURRENCY=5 
+
 # Default batch size for operations (default varies by operation)
 export CLOUDFLARE_BATCH_SIZE=500
 
@@ -148,6 +171,9 @@ cache-kv-purger config set-defaults --timeout 120
 
 # Set default batch parameters
 cache-kv-purger config set-defaults --batch-size 250 --concurrency 20
+
+# Set cache-specific concurrency limits
+cache-kv-purger config set-defaults --concurrency 15 --zone-concurrency 5
 
 # View current configuration
 cache-kv-purger config show
@@ -362,6 +388,11 @@ cache-kv-purger cache purge hosts \
 cache-kv-purger cache purge hosts --zone-id 01a7362d577a6c3019a474fd6f485823 \
   --host images.example.com \
   --verbose
+  
+# Control concurrency settings
+cache-kv-purger cache purge hosts --zone example.com \
+  --hosts "images.example.com,api.example.com,blog.example.com" \
+  --concurrency 15 --zone-concurrency 5
 ```
 
 ### Purge Prefixes
@@ -888,11 +919,13 @@ The tool includes several advanced features for optimizing performance and handl
 - **Cache Purge Operations**: For efficient purging of large sets
   - Default batch size for tags: 30 tags per request (Cloudflare limit)
   - Default batch size for URLs: 30 URLs per request
+  - Default concurrency: 10 parallel requests (configurable via `--concurrency` flag or `CLOUDFLARE_CACHE_CONCURRENCY`)
+  - Maximum concurrency: 20 parallel requests
   - Uses parallelism to maximize throughput while respecting API limits
 
 #### Cross-Zone Operations
 - **Multi-Zone Purging**: For purging the same content across multiple zones
-  - Default zone concurrency: 3 zones processed in parallel
+  - Default zone concurrency: 3 zones processed in parallel (configurable via `--zone-concurrency` flag or `CLOUDFLARE_MULTI_ZONE_CONCURRENCY`)
   - Automatically distributes files to appropriate zones based on hostname
   - Optimizes API calls to minimize rate limit impacts
 
@@ -925,8 +958,9 @@ For batch operations that partially succeed, the tool reports:
 
 #### Common Issues
 - **Rate Limit Exceeded**: Reduce concurrency or batch size, or add delays between operations
-- **Authentication Failures**: Verify your API token has the correct permissions
+- **Authentication Failures**: Verify your API token has the correct permissions (see [Required API Token Permissions](#required-api-token-permissions))
 - **Zone Not Found**: Ensure the zone ID or domain name is correct and belongs to your account
+- **Permission Denied**: Different operations require different permissions. If you receive a "Permission Denied" error, check that your token has all the required permissions for that specific operation
 
 #### Improving Performance
 - For very large KV namespaces (>100,000 keys), use pagination options

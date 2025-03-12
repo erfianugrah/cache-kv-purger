@@ -76,7 +76,7 @@ var configShowCmd = &cobra.Command{
 		// Display config
 		fmt.Println("Current configuration:")
 		fmt.Printf("  API Endpoint: %s\n", cfg.APIEndpoint)
-		
+
 		// Zone ID (may come from env var, config, or neither)
 		zoneID := cfg.GetZoneID()
 		if zoneID != "" {
@@ -88,7 +88,7 @@ var configShowCmd = &cobra.Command{
 		} else {
 			fmt.Printf("  Default Zone ID: (not set)\n")
 		}
-		
+
 		// Account ID (may come from env var, config, or neither)
 		accountID := cfg.GetAccountID()
 		if accountID != "" {

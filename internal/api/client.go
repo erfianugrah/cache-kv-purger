@@ -130,14 +130,14 @@ func (c *Client) Request(method, path string, query url.Values, body interface{}
 	// Check for errors
 	if resp.StatusCode >= 400 {
 		errorMsg := string(respBody)
-		
+
 		// Check if this might be a token scope issue
 		if resp.StatusCode == 403 && c.Creds.Type == auth.AuthTypeAPIToken {
 			if scopeHint := auth.CheckTokenScope(errorMsg); scopeHint != "" {
 				return nil, fmt.Errorf("%s (HTTP %d): %s", errorMsg, resp.StatusCode, scopeHint)
 			}
 		}
-		
+
 		return nil, fmt.Errorf("API error (HTTP %d): %s", resp.StatusCode, errorMsg)
 	}
 

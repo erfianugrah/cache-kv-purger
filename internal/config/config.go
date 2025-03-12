@@ -3,6 +3,7 @@ package config
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 )
@@ -10,23 +11,34 @@ import (
 const (
 	// DefaultAPIEndpoint is the default Cloudflare API endpoint
 	DefaultAPIEndpoint = "https://api.cloudflare.com/client/v4"
-	
+
 	// Environment variables for configuration
-	EnvZoneID    = "CLOUDFLARE_ZONE_ID"
-	EnvAccountID = "CLOUDFLARE_ACCOUNT_ID"
+	EnvZoneID               = "CLOUDFLARE_ZONE_ID"
+	EnvAccountID            = "CLOUDFLARE_ACCOUNT_ID"
+	EnvCacheConcurrency     = "CLOUDFLARE_CACHE_CONCURRENCY"
+	EnvMultiZoneConcurrency = "CLOUDFLARE_MULTI_ZONE_CONCURRENCY"
+
+	// Default concurrency values
+	DefaultCacheConcurrency     = 10
+	DefaultMaxCacheConcurrency  = 20
+	DefaultMultiZoneConcurrency = 3
 )
 
 // Config holds the application configuration
 type Config struct {
-	APIEndpoint string `json:"api_endpoint"`
-	DefaultZone string `json:"default_zone,omitempty"`
-	AccountID   string `json:"account_id,omitempty"`
+	APIEndpoint          string `json:"api_endpoint"`
+	DefaultZone          string `json:"default_zone,omitempty"`
+	AccountID            string `json:"account_id,omitempty"`
+	CacheConcurrency     int    `json:"cache_concurrency,omitempty"`
+	MultiZoneConcurrency int    `json:"multi_zone_concurrency,omitempty"`
 }
 
 // New creates a Config with default values
 func New() *Config {
 	return &Config{
-		APIEndpoint: DefaultAPIEndpoint,
+		APIEndpoint:          DefaultAPIEndpoint,
+		CacheConcurrency:     DefaultCacheConcurrency,
+		MultiZoneConcurrency: DefaultMultiZoneConcurrency,
 	}
 }
 
@@ -75,6 +87,21 @@ func LoadFromFile(path string) (*Config, error) {
 		cfg.AccountID = envAccountID
 	}
 
+	// Check environment variables for concurrency settings
+	if envCacheConcurrency := os.Getenv(EnvCacheConcurrency); envCacheConcurrency != "" {
+		var concurrency int
+		if _, err := fmt.Sscanf(envCacheConcurrency, "%d", &concurrency); err == nil && concurrency > 0 {
+			cfg.CacheConcurrency = concurrency
+		}
+	}
+
+	if envMultiZoneConcurrency := os.Getenv(EnvMultiZoneConcurrency); envMultiZoneConcurrency != "" {
+		var concurrency int
+		if _, err := fmt.Sscanf(envMultiZoneConcurrency, "%d", &concurrency); err == nil && concurrency > 0 {
+			cfg.MultiZoneConcurrency = concurrency
+		}
+	}
+
 	return cfg, nil
 }
 
@@ -114,6 +141,40 @@ func (c *Config) GetAccountID() string {
 	}
 	// Then use config value
 	return c.AccountID
+}
+
+// GetCacheConcurrency returns the cache concurrency setting from the config
+func (c *Config) GetCacheConcurrency() int {
+	// First check environment variable
+	if envConcurrency := os.Getenv(EnvCacheConcurrency); envConcurrency != "" {
+		var concurrency int
+		if _, err := fmt.Sscanf(envConcurrency, "%d", &concurrency); err == nil && concurrency > 0 {
+			return concurrency
+		}
+	}
+
+	// Then use config value, with default as fallback
+	if c.CacheConcurrency > 0 {
+		return c.CacheConcurrency
+	}
+	return DefaultCacheConcurrency
+}
+
+// GetMultiZoneConcurrency returns the multi-zone concurrency setting from the config
+func (c *Config) GetMultiZoneConcurrency() int {
+	// First check environment variable
+	if envConcurrency := os.Getenv(EnvMultiZoneConcurrency); envConcurrency != "" {
+		var concurrency int
+		if _, err := fmt.Sscanf(envConcurrency, "%d", &concurrency); err == nil && concurrency > 0 {
+			return concurrency
+		}
+	}
+
+	// Then use config value, with default as fallback
+	if c.MultiZoneConcurrency > 0 {
+		return c.MultiZoneConcurrency
+	}
+	return DefaultMultiZoneConcurrency
 }
 
 // fileExists checks if a file exists and is not a directory

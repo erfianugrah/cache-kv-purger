@@ -111,7 +111,7 @@ var zonesGetCmd = &cobra.Command{
 		fmt.Printf("  ID: %s\n", zone.ID)
 		fmt.Printf("  Status: %s\n", zone.Status)
 		fmt.Printf("  Type: %s\n", zone.Type)
-		
+
 		if len(zone.NameServers) > 0 {
 			fmt.Printf("  Nameservers:\n")
 			for i, ns := range zone.NameServers {
@@ -156,25 +156,25 @@ var zonesConfigCmd = &cobra.Command{
 				if err != nil {
 					return fmt.Errorf("failed to create API client: %w", err)
 				}
-				
+
 				// Try to get account ID
 				accountID := cfg.GetAccountID()
-				
+
 				// Try to resolve the zone
 				resolvedZoneID, err := zones.ResolveZoneIdentifier(client, accountID, zoneIdentifier)
 				if err != nil {
 					return fmt.Errorf("failed to resolve zone '%s': %w", zoneIdentifier, err)
 				}
-				
+
 				// Get the zone info to show the domain name
 				zoneInfo, err := getZoneInfo(client, resolvedZoneID)
 				if err == nil && zoneInfo != nil {
 					fmt.Printf("Resolved zone name '%s' to ID: %s\n", zoneIdentifier, resolvedZoneID)
 				}
-				
+
 				zoneIdentifier = resolvedZoneID
 			}
-			
+
 			cfg.DefaultZone = zoneIdentifier
 
 			// Save updated config
@@ -186,7 +186,7 @@ var zonesConfigCmd = &cobra.Command{
 		} else {
 			// Just display the current settings
 			zoneID := cfg.GetZoneID()
-			
+
 			if zoneID != "" {
 				// Try to get the zone name for more informative output
 				client, err := api.NewClient()
@@ -197,7 +197,7 @@ var zonesConfigCmd = &cobra.Command{
 						return nil
 					}
 				}
-				
+
 				fmt.Printf("Current default zone: %s\n", zoneID)
 			} else {
 				fmt.Printf("No default zone configured.\n")

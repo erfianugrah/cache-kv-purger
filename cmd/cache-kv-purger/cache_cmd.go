@@ -31,14 +31,16 @@ var purgeCmd = &cobra.Command{
 
 // purgeFlagsVars stores the variables for the purge command flags
 var purgeFlagsVars struct {
-	zoneID          string
-	zones           []string // Support for multiple zones with --zones (repeated flag)
-	zonesCSV        []string // Support for multiple zones with --zone-list (comma separated)
-	purgeEverything bool
-	files           []string
-	tags            []string
-	hosts           []string
-	prefixes        []string
+	zoneID               string
+	zones                []string // Support for multiple zones with --zones (repeated flag)
+	zonesCSV             []string // Support for multiple zones with --zone-list (comma separated)
+	purgeEverything      bool
+	files                []string
+	tags                 []string
+	hosts                []string
+	prefixes             []string
+	cacheConcurrency     int // Concurrency for cache operations
+	multiZoneConcurrency int // Concurrency for multi-zone operations
 }
 
 // createPurgeEverythingCmd creates a command to purge everything
@@ -142,7 +144,7 @@ func createPurgeFilesCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Get verbose flag once at the beginning
 			verbose, _ := cmd.Flags().GetBool("verbose")
-			
+
 			// Create API client
 			client, err := api.NewClient()
 			if err != nil {
@@ -223,7 +225,20 @@ func createPurgeFilesCmd() *cobra.Command {
 			// If no specific zone is provided, try auto-detection
 			if len(purgeFlagsVars.zones) == 0 && purgeFlagsVars.zoneID == "" && cmd.Flags().Lookup("zone").Value.String() == "" {
 				// No zone specified, so try to auto-detect zones from URLs
-				return handleAutoZoneDetectionForFiles(client, accountID, allFiles, cmd)
+				// Get concurrency settings
+				cacheConcurrency := purgeFlagsVars.cacheConcurrency
+				multiZoneConcurrency := purgeFlagsVars.multiZoneConcurrency
+
+				// If not set from command line, get from config
+				if cacheConcurrency <= 0 && cfg != nil {
+					cacheConcurrency = cfg.GetCacheConcurrency()
+				}
+
+				if multiZoneConcurrency <= 0 && cfg != nil {
+					multiZoneConcurrency = cfg.GetMultiZoneConcurrency()
+				}
+
+				return handleAutoZoneDetectionForFiles(client, accountID, allFiles, cmd, cacheConcurrency, multiZoneConcurrency)
 			}
 
 			// Resolve zone identifiers (could be names or IDs)
@@ -479,7 +494,7 @@ func createPurgeTagsBatchCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Get verbose flag once at the beginning
 			verbose, _ := cmd.Flags().GetBool("verbose")
-			
+
 			// Create API client
 			client, err := api.NewClient()
 			if err != nil {
@@ -726,11 +741,14 @@ func createPurgeHostsCmd() *cobra.Command {
   cache-kv-purger cache purge hosts --zone example.com --hosts-file hosts.txt
   
   # Auto-detect zones based on hostnames (no need to specify zone)
-  cache-kv-purger cache purge hosts --host images.example.com --host api.example2.com`,
+  cache-kv-purger cache purge hosts --host images.example.com --host api.example2.com
+  
+  # Control concurrency
+  cache-kv-purger cache purge hosts --zone example.com --hosts "..." --concurrency 15 --zone-concurrency 5`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Declare verbose once at the beginning
 			verbose, _ := cmd.Flags().GetBool("verbose")
-			
+
 			// Create API client
 			client, err := api.NewClient()
 			if err != nil {
@@ -743,10 +761,10 @@ func createPurgeHostsCmd() *cobra.Command {
 			if err == nil {
 				accountID = cfg.GetAccountID()
 			}
-			
+
 			// Collect all hosts from various input methods
 			allHosts := make([]string, 0)
-			
+
 			// Add hosts from individual --host flags
 			allHosts = append(allHosts, purgeFlagsVars.hosts...)
 
@@ -794,10 +812,24 @@ func createPurgeHostsCmd() *cobra.Command {
 				return fmt.Errorf("at least one host is required, specify with --host, --hosts, or --hosts-file")
 			}
 
+			// Get concurrency settings
+			cacheConcurrency := purgeFlagsVars.cacheConcurrency
+			multiZoneConcurrency := purgeFlagsVars.multiZoneConcurrency
+
+			// If not set from command line, get from config
+			if cacheConcurrency <= 0 && cfg != nil {
+				cacheConcurrency = cfg.GetCacheConcurrency()
+			}
+
+			if multiZoneConcurrency <= 0 && cfg != nil {
+				multiZoneConcurrency = cfg.GetMultiZoneConcurrency()
+			}
+
 			// If no specific zone is provided, try auto-detection
 			if len(purgeFlagsVars.zones) == 0 && purgeFlagsVars.zoneID == "" && cmd.Flags().Lookup("zone").Value.String() == "" {
 				// No zone specified, so try to auto-detect zones from hosts
-				return handleAutoZoneDetectionForHosts(client, accountID, allHosts, cmd)
+				// Pass concurrency settings to the handler
+				return handleAutoZoneDetectionForHosts(client, accountID, allHosts, cmd, cacheConcurrency, multiZoneConcurrency)
 			}
 
 			// Get the zone ID from flag, config, or environment variable
@@ -817,7 +849,7 @@ func createPurgeHostsCmd() *cobra.Command {
 			if zoneID == "" {
 				return fmt.Errorf("zone ID is required, specify it with --zone flag, CLOUDFLARE_ZONE_ID environment variable, or set a default zone in config")
 			}
-			
+
 			// Resolve zone (could be name or ID)
 			resolvedZoneID, err := zones.ResolveZoneIdentifier(client, accountID, zoneID)
 			if err != nil {
@@ -831,7 +863,7 @@ func createPurgeHostsCmd() *cobra.Command {
 					fmt.Printf("  %d. %s\n", i+1, host)
 				}
 			}
-			
+
 			resp, err := cache.PurgeHosts(client, resolvedZoneID, allHosts)
 			if err != nil {
 				return fmt.Errorf("failed to purge hosts: %w", err)
@@ -952,7 +984,8 @@ func resolveZoneIdentifiers(cmd *cobra.Command, client *api.Client, accountID st
 }
 
 // handleAutoZoneDetectionForFiles handles auto-detection of zones from file URLs
-func handleAutoZoneDetectionForFiles(client *api.Client, accountID string, files []string, cmd *cobra.Command) error {
+func handleAutoZoneDetectionForFiles(client *api.Client, accountID string, files []string, cmd *cobra.Command,
+	cacheConcurrency, multiZoneConcurrency int) error {
 	// Group files by hostname
 	filesByHost := make(map[string][]string)
 	for _, file := range files {
@@ -977,22 +1010,24 @@ func handleAutoZoneDetectionForFiles(client *api.Client, accountID string, files
 		hosts = append(hosts, host)
 	}
 
-	return handleHostZoneDetection(client, accountID, hosts, filesByHost, cmd)
+	return handleHostZoneDetection(client, accountID, hosts, filesByHost, cmd, cacheConcurrency, multiZoneConcurrency)
 }
 
 // handleAutoZoneDetectionForHosts handles auto-detection of zones from hostnames
-func handleAutoZoneDetectionForHosts(client *api.Client, accountID string, hosts []string, cmd *cobra.Command) error {
+func handleAutoZoneDetectionForHosts(client *api.Client, accountID string, hosts []string, cmd *cobra.Command,
+	cacheConcurrency, multiZoneConcurrency int) error {
 	// Create a map where hosts map to themselves (we don't have files here)
 	hostMap := make(map[string][]string)
 	for _, host := range hosts {
 		hostMap[host] = []string{host}
 	}
 
-	return handleHostZoneDetection(client, accountID, hosts, hostMap, cmd)
+	return handleHostZoneDetection(client, accountID, hosts, hostMap, cmd, cacheConcurrency, multiZoneConcurrency)
 }
 
 // handleHostZoneDetection handles detection of zones from a list of hosts
-func handleHostZoneDetection(client *api.Client, accountID string, hosts []string, itemsByHost map[string][]string, cmd *cobra.Command) error {
+func handleHostZoneDetection(client *api.Client, accountID string, hosts []string, itemsByHost map[string][]string,
+	cmd *cobra.Command, cacheConcurrency, multiZoneConcurrency int) error {
 	verbose, _ := cmd.Flags().GetBool("verbose")
 
 	if verbose {
@@ -1285,4 +1320,6 @@ func init() {
 	purgeCmd.PersistentFlags().BoolP("verbose", "v", false, "Enable verbose output")
 	purgeCmd.PersistentFlags().Bool("all-zones", false, "Purge content from all zones in the account")
 	purgeCmd.PersistentFlags().String("zone-list", "", "Comma-delimited list of zone IDs or names to purge content from")
+	purgeCmd.PersistentFlags().IntVar(&purgeFlagsVars.cacheConcurrency, "concurrency", 0, "Number of concurrent cache operations (default 10, max 20)")
+	purgeCmd.PersistentFlags().IntVar(&purgeFlagsVars.multiZoneConcurrency, "zone-concurrency", 0, "Number of zones to process concurrently (default 3)")
 }

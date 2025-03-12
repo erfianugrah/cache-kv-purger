@@ -71,4 +71,3 @@ func CheckTokenScope(errorMsg string) string {
 	}
 	return ""
 }
-

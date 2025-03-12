@@ -126,9 +126,9 @@ func PurgeFilesWithHeaders(client *api.Client, zoneID string, files []FileWithHe
 // PurgeFilesWithHeadersInBatches purges files with custom headers in batches to comply with Cloudflare API limits
 // The batch size is automatically determined based on response headers or defaults to 30
 // The function takes a progressCallback that receives updates on completed/total batches
-func PurgeFilesWithHeadersInBatches(client *api.Client, zoneID string, files []FileWithHeaders, 
-	progressCallback func(completed, total, successful int)) ([]FileWithHeaders, []error) {
-	
+func PurgeFilesWithHeadersInBatches(client *api.Client, zoneID string, files []FileWithHeaders,
+	progressCallback func(completed, total, successful int), concurrencyOverride int) ([]FileWithHeaders, []error) {
+
 	if zoneID == "" {
 		return nil, []error{fmt.Errorf("zone ID is required")}
 	}
@@ -170,17 +170,22 @@ func PurgeFilesWithHeadersInBatches(client *api.Client, zoneID string, files []F
 
 	// Create a result channel for completed batches
 	type batchResult struct {
-		batchIndex   int
-		batchItems   []FileWithHeaders
-		err          error
+		batchIndex int
+		batchItems []FileWithHeaders
+		err        error
 	}
 
 	resultChan := make(chan batchResult, len(batches))
 
-	// Set reasonable concurrency (same as KV operations)
+	// Set concurrency based on override or default
 	concurrency := 10 // Default concurrency
+	if concurrencyOverride > 0 {
+		concurrency = concurrencyOverride
+	}
+
+	// Cap concurrency to avoid overwhelming API
 	if concurrency > 20 {
-		concurrency = 20 // Cap concurrency to avoid overwhelming API
+		concurrency = 20
 	}
 
 	// Use a semaphore to limit concurrent goroutines
@@ -219,7 +224,7 @@ func PurgeFilesWithHeadersInBatches(client *api.Client, zoneID string, files []F
 	// Collect results
 	successful := make([]FileWithHeaders, 0)
 	var errors []error
-	
+
 	// Track progress for callback
 	completed := 0
 	completedItems := 0
@@ -227,7 +232,7 @@ func PurgeFilesWithHeadersInBatches(client *api.Client, zoneID string, files []F
 	// Collect results from all batches
 	for i := 0; i < len(batches); i++ {
 		result := <-resultChan
-		
+
 		// Save error or success
 		if result.err != nil {
 			errors = append(errors, result.err)
@@ -251,7 +256,8 @@ func PurgeFilesWithHeadersInBatches(client *api.Client, zoneID string, files []F
 // PurgeFilesWithHeadersAcrossZonesInBatches purges files with headers from multiple zones in batches
 // Useful for purging the same set of files across multiple zones
 func PurgeFilesWithHeadersAcrossZonesInBatches(client *api.Client, zoneIDs []string, files []FileWithHeaders,
-	progressCallback func(zoneIndex, totalZones, batchesDone, totalBatches, successful int)) (map[string][]FileWithHeaders, map[string][]error) {
+	progressCallback func(zoneIndex, totalZones, batchesDone, totalBatches, successful int),
+	concurrencyOverride int) (map[string][]FileWithHeaders, map[string][]error) {
 
 	if len(zoneIDs) == 0 {
 		return nil, map[string][]error{"error": {fmt.Errorf("at least one zone ID is required")}}
@@ -272,24 +278,27 @@ func PurgeFilesWithHeadersAcrossZonesInBatches(client *api.Client, zoneIDs []str
 
 	// Default batch size
 	batchSize := 30
-	
+
 	// Calculate total number of batches across all zones
 	batchesPerZone := (len(files) + batchSize - 1) / batchSize
 	totalBatches := batchesPerZone * len(zoneIDs)
 
 	// Create a result channel for completed zones (eliminates need for mutex)
 	type zoneResult struct {
-		zoneIndex   int
-		zoneID      string
-		successful  []FileWithHeaders
-		errors      []error
+		zoneIndex  int
+		zoneID     string
+		successful []FileWithHeaders
+		errors     []error
 	}
 
 	resultChan := make(chan zoneResult, len(zoneIDs))
 
-	// Set reasonable concurrency
-	concurrency := 3 // Maximum number of zones to process concurrently
-	
+	// Set concurrency based on override or default
+	concurrency := 3 // Default maximum number of zones to process concurrently
+	if concurrencyOverride > 0 {
+		concurrency = concurrencyOverride
+	}
+
 	// Use a semaphore to limit concurrent zone processing
 	sem := make(chan struct{}, concurrency)
 
@@ -304,27 +313,27 @@ func PurgeFilesWithHeadersAcrossZonesInBatches(client *api.Client, zoneIDs []str
 
 			// Counter for batches completed in this zone
 			zoneProgress := 0
-			
+
 			// Create a zone-specific progress callback
 			zoneProgressCallback := func(batchCompleted, batchTotal, successfulCount int) {
 				// Update zone progress
 				zoneProgress = batchCompleted
-				
+
 				// Call the parent progress callback
-				progressCallback(idx+1, len(zoneIDs), 
-					(idx * batchesPerZone) + zoneProgress, // overall batches done
+				progressCallback(idx+1, len(zoneIDs),
+					(idx*batchesPerZone)+zoneProgress, // overall batches done
 					totalBatches, successfulCount)
 			}
 
 			// Purge files with headers for this zone
-			successful, errors := PurgeFilesWithHeadersInBatches(client, zID, files, zoneProgressCallback)
+			successful, errors := PurgeFilesWithHeadersInBatches(client, zID, files, zoneProgressCallback, concurrencyOverride)
 
 			// Send result back through channel
 			resultChan <- zoneResult{
-				zoneIndex:   idx,
-				zoneID:      zID,
-				successful:  successful,
-				errors:      errors,
+				zoneIndex:  idx,
+				zoneID:     zID,
+				successful: successful,
+				errors:     errors,
 			}
 		}(i, zoneID)
 	}
@@ -332,12 +341,12 @@ func PurgeFilesWithHeadersAcrossZonesInBatches(client *api.Client, zoneIDs []str
 	// Collect results from all zones
 	for i := 0; i < len(zoneIDs); i++ {
 		result := <-resultChan
-		
+
 		// Store results for this zone
 		if len(result.successful) > 0 {
 			successfulByZone[result.zoneID] = result.successful
 		}
-		
+
 		if len(result.errors) > 0 {
 			errorsByZone[result.zoneID] = result.errors
 		}

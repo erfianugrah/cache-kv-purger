@@ -26,20 +26,20 @@ func ListZones(client *api.Client, accountID string) (*ZoneListResponse, error) 
 	if accountID != "" {
 		query.Add("account.id", accountID)
 	}
-	
+
 	// Make the request
 	path := "/zones"
 	respBody, err := client.Request(http.MethodGet, path, query, nil)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Parse the response
 	var zonesResp ZoneListResponse
 	if err := json.Unmarshal(respBody, &zonesResp); err != nil {
 		return nil, fmt.Errorf("failed to parse API response: %w", err)
 	}
-	
+
 	if !zonesResp.Success {
 		errorStr := "API reported failure"
 		if len(zonesResp.Errors) > 0 {
@@ -47,7 +47,7 @@ func ListZones(client *api.Client, accountID string) (*ZoneListResponse, error) 
 		}
 		return nil, fmt.Errorf("failed to list zones: %s", errorStr)
 	}
-	
+
 	return &zonesResp, nil
 }
 
@@ -59,20 +59,20 @@ func GetZoneByName(client *api.Client, accountID, name string) (*api.Zone, error
 		query.Add("account.id", accountID)
 	}
 	query.Add("name", name)
-	
+
 	// Make the request
 	path := "/zones"
 	respBody, err := client.Request(http.MethodGet, path, query, nil)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Parse the response
 	var zonesResp ZoneListResponse
 	if err := json.Unmarshal(respBody, &zonesResp); err != nil {
 		return nil, fmt.Errorf("failed to parse API response: %w", err)
 	}
-	
+
 	if !zonesResp.Success {
 		errorStr := "API reported failure"
 		if len(zonesResp.Errors) > 0 {
@@ -80,11 +80,11 @@ func GetZoneByName(client *api.Client, accountID, name string) (*api.Zone, error
 		}
 		return nil, fmt.Errorf("failed to find zone: %s", errorStr)
 	}
-	
+
 	if len(zonesResp.Result) == 0 {
 		return nil, fmt.Errorf("no zone found with name '%s'", name)
 	}
-	
+
 	return &zonesResp.Result[0], nil
 }
 
@@ -97,7 +97,7 @@ func ResolveZoneIdentifier(client *api.Client, accountID, identifier string) (st
 	if len(identifier) == 32 && isHexString(identifier) {
 		return identifier, nil
 	}
-	
+
 	// Try to resolve as domain name
 	zone, err := GetZoneByName(client, accountID, identifier)
 	if err != nil {
@@ -106,13 +106,13 @@ func ResolveZoneIdentifier(client *api.Client, accountID, identifier string) (st
 		if err != nil {
 			return "", fmt.Errorf("failed to list zones: %w", err)
 		}
-		
+
 		// Look for a parent domain of the specified name
 		domainParts := strings.Split(identifier, ".")
 		for i := 1; i < len(domainParts); i++ {
 			// Try each possible parent domain
 			parentDomain := strings.Join(domainParts[i:], ".")
-			
+
 			// Check if this is a valid zone
 			for _, zone := range zonesResp.Result {
 				if zone.Name == parentDomain {
@@ -120,10 +120,10 @@ func ResolveZoneIdentifier(client *api.Client, accountID, identifier string) (st
 				}
 			}
 		}
-		
+
 		return "", fmt.Errorf("failed to resolve '%s' as a zone: %w", identifier, err)
 	}
-	
+
 	return zone.ID, nil
 }
 
