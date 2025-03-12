@@ -54,13 +54,13 @@ var zonesListCmd = &cobra.Command{
 		}
 
 		// Output result
-		if len(zones) == 0 {
+		if len(zones.Result) == 0 {
 			fmt.Println("No zones found")
 			return nil
 		}
 
-		fmt.Printf("Found %d zones:\n", len(zones))
-		for i, zone := range zones {
+		fmt.Printf("Found %d zones:\n", len(zones.Result))
+		for i, zone := range zones.Result {
 			fmt.Printf("%d. %s (ID: %s, Status: %s)\n", i+1, zone.Name, zone.ID, zone.Status)
 		}
 
@@ -193,7 +193,7 @@ var zonesConfigCmd = &cobra.Command{
 				if err == nil {
 					zoneInfo, err := getZoneInfo(client, zoneID)
 					if err == nil && zoneInfo != nil {
-						fmt.Printf("Current default zone: %s (%s)\n", zoneInfo.Name, zoneID)
+						fmt.Printf("Current default zone: %s (%s)\n", zoneInfo.Result.Name, zoneID)
 						return nil
 					}
 				}

@@ -27,6 +27,7 @@ A command-line interface tool for managing Cloudflare cache purging and Workers 
 - **Cache Management**
   - Purge entire cache
   - Purge specific files
+  - Purge files with custom headers (for cache variants)
   - Purge by cache tags, hosts, or prefixes
   - Multi-zone purging support
   - Batch processing for cache tag purging
@@ -174,11 +175,23 @@ Purges specific files from the cache by URL.
 # Purge a single file
 cache-kv-purger cache purge files --zone example.com --file https://example.com/css/styles.css
 
-# Purge multiple files
+# Purge multiple files using individual flags
 cache-kv-purger cache purge files --zone example.com \
   --file https://example.com/css/styles.css \
   --file https://example.com/js/app.js \
   --file https://example.com/images/logo.png
+
+# Purge multiple files using comma-delimited list
+cache-kv-purger cache purge files --zone example.com \
+  --files "https://example.com/css/styles.css,https://example.com/js/app.js,https://example.com/images/logo.png"
+
+# Purge files from a text file (one URL per line)
+cache-kv-purger cache purge files --zone example.com --files-list urls.txt
+
+# Auto-zone detection (happens automatically when no zone is specified)
+cache-kv-purger cache purge files \
+  --file https://example.com/css/styles.css \
+  --file https://example2.com/js/app.js
 
 # Using zone ID with verbose output
 cache-kv-purger cache purge files --zone-id 01a7362d577a6c3019a474fd6f485823 \
@@ -292,11 +305,23 @@ Purges content from specific hosts within a zone.
 # Purge a single host
 cache-kv-purger cache purge hosts --zone example.com --host images.example.com
 
-# Purge multiple hosts
+# Purge multiple hosts using individual flags
 cache-kv-purger cache purge hosts --zone example.com \
   --host images.example.com \
   --host api.example.com \
   --host blog.example.com
+
+# Purge multiple hosts using comma-delimited list
+cache-kv-purger cache purge hosts --zone example.com \
+  --hosts "images.example.com,api.example.com,blog.example.com"
+
+# Purge hosts from a text file (one host per line)
+cache-kv-purger cache purge hosts --zone example.com --hosts-file hosts.txt
+
+# Auto-zone detection (happens automatically when no zone is specified)
+cache-kv-purger cache purge hosts \
+  --host images.example.com \
+  --host api.example2.com
 
 # Using zone ID with verbose output
 cache-kv-purger cache purge hosts --zone-id 01a7362d577a6c3019a474fd6f485823 \
@@ -312,17 +337,109 @@ Purges content with specific URL prefixes.
 # Purge a single prefix
 cache-kv-purger cache purge prefixes --zone example.com --prefix /blog/
 
-# Purge multiple prefixes
+# Purge multiple prefixes using individual flags
 cache-kv-purger cache purge prefixes --zone example.com \
   --prefix /blog/ \
   --prefix /products/ \
   --prefix /api/v1/
+
+# Purge multiple prefixes using comma-delimited list
+cache-kv-purger cache purge prefixes --zone example.com \
+  --prefixes "/blog/,/products/,/api/v1/"
+
+# Purge prefixes from a text file (one prefix per line)
+cache-kv-purger cache purge prefixes --zone example.com --prefixes-file prefixes.txt
+
+# Auto-zone detection with full URLs (happens automatically when no zone is specified)
+cache-kv-purger cache purge prefixes \
+  --prefix https://example.com/blog/ \
+  --prefix https://example2.com/assets/
 
 # Using zone ID with verbose output
 cache-kv-purger cache purge prefixes --zone-id 01a7362d577a6c3019a474fd6f485823 \
   --prefix /blog/ \
   --verbose
 ```
+
+### Purge Files With Headers
+
+Purges specific files from the cache with custom request headers to target specific cache variants.
+
+```bash
+# Purge a specific URL with a single header
+cache-kv-purger cache purge files-with-headers --zone example.com \
+  --file https://example.com/image.jpg \
+  --header "Accept-Language:en-US"
+
+# Purge a specific URL with multiple headers
+cache-kv-purger cache purge files-with-headers --zone example.com \
+  --file https://example.com/image.jpg \
+  --header "CF-IPCountry:US" \
+  --header "CF-Device-Type:desktop" \
+  --header "Accept-Language:en-US"
+
+# Purge multiple URLs with the same set of headers
+cache-kv-purger cache purge files-with-headers --zone example.com \
+  --file https://example.com/image1.jpg \
+  --file https://example.com/image2.jpg \
+  --header "CF-IPCountry:US" \
+  --header "CF-Device-Type:desktop"
+
+# Using zone ID with verbose output
+cache-kv-purger cache purge files-with-headers --zone-id 01a7362d577a6c3019a474fd6f485823 \
+  --file https://example.com/image.jpg \
+  --header "CF-IPCountry:US" \
+  --verbose
+```
+
+#### Batch Purging for Files with Headers
+
+When purging a large number of URLs with headers, the tool automatically handles batch processing with concurrent API calls to comply with Cloudflare API limits while providing optimal performance.
+
+```bash
+# Purge a large number of URLs (automatically processed in parallel batches)
+cache-kv-purger cache purge files-with-headers --zone example.com \
+  --file https://example.com/image1.jpg \
+  --file https://example.com/image2.jpg \
+  --file https://example.com/image3.jpg \
+  --file https://example.com/image4.jpg \
+  ... (many more files) \
+  --header "CF-IPCountry:US" \
+  --header "CF-Device-Type:desktop"
+
+# Purge using a comma-delimited list of URLs
+cache-kv-purger cache purge files-with-headers --zone example.com \
+  --files "https://example.com/image1.jpg,https://example.com/image2.jpg,https://example.com/image3.jpg" \
+  --header "CF-IPCountry:US"
+
+# Loading files from a text file (one URL per line)
+cache-kv-purger cache purge files-with-headers --zone example.com \
+  --files-list urls.txt \
+  --header "CF-IPCountry:US" \
+  --header "CF-Device-Type:desktop"
+
+# Auto-zone detection (happens automatically when no zone is specified)
+cache-kv-purger cache purge files-with-headers \
+  --file https://example.com/image.jpg \
+  --file https://example2.com/images/logo.png \
+  --header "CF-IPCountry:US"
+
+# Purge across multiple zones with concurrent processing
+cache-kv-purger cache purge files-with-headers \
+  --zones example.com --zones example.org \
+  --file https://example.com/image1.jpg \
+  --file https://example.com/image2.jpg \
+  ... (many more files) \
+  --header "CF-IPCountry:US" \
+  --verbose
+```
+
+The concurrent processing automatically:
+- Batches requests to comply with API limits (30 URLs per request)
+- Processes batches in parallel (up to 10 concurrent requests)
+- Processes up to 3 zones in parallel for multi-zone operations
+- Auto-detects zones based on URL hostnames when no zone is specified
+- Reports progress during long-running batch operations
 
 ### Purge Custom
 

@@ -13,7 +13,7 @@ import (
 // StreamingFilterKeysByMetadata performs a streaming filter of keys by metadata
 // This is much more efficient for large namespaces as it processes in chunks
 func StreamingFilterKeysByMetadata(client *api.Client, accountID, namespaceID, metadataField, metadataValue string,
-	chunkSize int, concurrency int, progressCallback func(keysFetched, keysProcessed, keysMatched, total int)) ([]KeyValuePair, error) {
+	chunkSize int, _ int, progressCallback func(keysFetched, keysProcessed, keysMatched, total int)) ([]KeyValuePair, error) {
 
 	if accountID == "" {
 		return nil, fmt.Errorf("account ID is required")
@@ -27,12 +27,7 @@ func StreamingFilterKeysByMetadata(client *api.Client, accountID, namespaceID, m
 	if chunkSize <= 0 {
 		chunkSize = 100 // Default chunk size
 	}
-	if concurrency <= 0 {
-		concurrency = 20 // Default concurrency
-	}
-	if concurrency > 50 {
-		concurrency = 50 // Cap maximum concurrency
-	}
+	// Note: concurrency parameter is accepted for API consistency but not used in this function
 
 	// Simple progress callback if none provided
 	if progressCallback == nil {
