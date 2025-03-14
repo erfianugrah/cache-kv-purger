@@ -318,158 +318,6 @@ func createPurgeFilesCmd() *cobra.Command {
 
 // createPurgeTagsCmd creates a command to purge cache by tag
 func createPurgeTagsCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "tags",
-		Short: "Purge cached content by tags",
-		Long:  `Purge cached content from Cloudflare's edge servers based on cache tags.`,
-		Example: `  # Purge a single tag
-  cache-kv-purger cache purge tags --zone example.com --tag product-images
-
-  # Purge multiple tags
-  cache-kv-purger cache purge tags --zone example.com --tag product-images --tag category-pages`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			// Create API client
-			client, err := api.NewClient()
-			if err != nil {
-				return fmt.Errorf("failed to create API client: %w", err)
-			}
-
-			// Get account ID for resolving zone names
-			accountID := ""
-			cfg, err := config.LoadFromFile("")
-			if err == nil {
-				accountID = cfg.GetAccountID()
-			}
-
-			// Verify tag flags
-			if len(purgeFlagsVars.tags) == 0 {
-				return fmt.Errorf("at least one tag is required, specify with --tag")
-			}
-
-			// Get the zone ID from flag, config, or environment variable
-			zoneID := purgeFlagsVars.zoneID
-			if zoneID == "" {
-				// Try to get from the global flag
-				zoneID, _ = cmd.Flags().GetString("zone")
-			}
-
-			if zoneID == "" {
-				// Try to get from config or environment variable
-				if cfg != nil {
-					zoneID = cfg.GetZoneID()
-				}
-			}
-
-			if zoneID == "" {
-				return fmt.Errorf("zone ID is required, specify it with --zone flag, CLOUDFLARE_ZONE_ID environment variable, or set a default zone in config")
-			}
-
-			// Resolve zone (could be name or ID)
-			resolvedZoneID, err := zones.ResolveZoneIdentifier(client, accountID, zoneID)
-			if err != nil {
-				return fmt.Errorf("failed to resolve zone: %w", err)
-			}
-
-			// Purge tags
-			verbose, _ := cmd.Flags().GetBool("verbose")
-			if verbose {
-				fmt.Printf("Purging content with %d tags for zone %s...\n", len(purgeFlagsVars.tags), resolvedZoneID)
-				for i, tag := range purgeFlagsVars.tags {
-					fmt.Printf("  %d. %s\n", i+1, tag)
-				}
-			}
-
-			resp, err := cache.PurgeTags(client, resolvedZoneID, purgeFlagsVars.tags)
-			if err != nil {
-				return fmt.Errorf("failed to purge tags: %w", err)
-			}
-
-			fmt.Printf("Successfully purged content with %d tags. Purge ID: %s\n", len(purgeFlagsVars.tags), resp.Result.ID)
-			return nil
-		},
-	}
-
-	return cmd
-}
-
-// createPurgePrefixesCmd creates a command to purge cache by URL prefix
-func createPurgePrefixesCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "prefixes",
-		Short: "Purge cached content by URL prefix",
-		Long:  `Purge cached content from Cloudflare's edge servers based on URL prefixes.`,
-		Example: `  # Purge a single prefix
-  cache-kv-purger cache purge prefixes --zone example.com --prefix https://example.com/blog/
-
-  # Purge multiple prefixes
-  cache-kv-purger cache purge prefixes --zone example.com --prefix https://example.com/blog/ --prefix https://example.com/products/`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			// Create API client
-			client, err := api.NewClient()
-			if err != nil {
-				return fmt.Errorf("failed to create API client: %w", err)
-			}
-
-			// Get account ID for resolving zone names
-			accountID := ""
-			cfg, err := config.LoadFromFile("")
-			if err == nil {
-				accountID = cfg.GetAccountID()
-			}
-
-			// Verify prefix flags
-			if len(purgeFlagsVars.prefixes) == 0 {
-				return fmt.Errorf("at least one prefix is required, specify with --prefix")
-			}
-
-			// Get the zone ID from flag, config, or environment variable
-			zoneID := purgeFlagsVars.zoneID
-			if zoneID == "" {
-				// Try to get from the global flag
-				zoneID, _ = cmd.Flags().GetString("zone")
-			}
-
-			if zoneID == "" {
-				// Try to get from config or environment variable
-				if cfg != nil {
-					zoneID = cfg.GetZoneID()
-				}
-			}
-
-			if zoneID == "" {
-				return fmt.Errorf("zone ID is required, specify it with --zone flag, CLOUDFLARE_ZONE_ID environment variable, or set a default zone in config")
-			}
-
-			// Resolve zone (could be name or ID)
-			resolvedZoneID, err := zones.ResolveZoneIdentifier(client, accountID, zoneID)
-			if err != nil {
-				return fmt.Errorf("failed to resolve zone: %w", err)
-			}
-
-			// Purge prefixes
-			verbose, _ := cmd.Flags().GetBool("verbose")
-			if verbose {
-				fmt.Printf("Purging content with %d prefixes for zone %s...\n", len(purgeFlagsVars.prefixes), resolvedZoneID)
-				for i, prefix := range purgeFlagsVars.prefixes {
-					fmt.Printf("  %d. %s\n", i+1, prefix)
-				}
-			}
-
-			resp, err := cache.PurgePrefixes(client, resolvedZoneID, purgeFlagsVars.prefixes)
-			if err != nil {
-				return fmt.Errorf("failed to purge prefixes: %w", err)
-			}
-
-			fmt.Printf("Successfully purged content with %d prefixes. Purge ID: %s\n", len(purgeFlagsVars.prefixes), resp.Result.ID)
-			return nil
-		},
-	}
-
-	return cmd
-}
-
-// createPurgeTagsBatchCmd creates a command to batch purge cache by tag
-func createPurgeTagsBatchCmd() *cobra.Command {
 	// Define local variables for this command's flags
 	var commaDelimitedTags string
 	var tagsFile string
@@ -477,20 +325,26 @@ func createPurgeTagsBatchCmd() *cobra.Command {
 	var dryRun bool
 
 	cmd := &cobra.Command{
-		Use:   "batch-tags",
-		Short: "Batch purge cached content by tags",
-		Long:  `Purge cached content from Cloudflare's edge servers based on cache tags, in batches.`,
-		Example: `  # Purge multiple tags from a comma-delimited list in batches
-  cache-kv-purger cache purge batch-tags --zone example.com --tags "tag1,tag2,tag3,tag4" --batch-size 2
+		Use:   "tags",
+		Short: "Purge cached content by tags",
+		Long:  `Purge cached content from Cloudflare's edge servers based on cache tags.`,
+		Example: `  # Purge a single tag
+  cache-kv-purger cache purge tags --zone example.com --tag video-resizer
 
-  # Purge tags from a CSV file (one tag per line)
-  cache-kv-purger cache purge batch-tags --zone example.com --tags-file tags.csv --batch-size 50
-  
-  # Purge tags from a JSON file (array of tags)
-  cache-kv-purger cache purge batch-tags --zone example.com --tags-file tags.json --batch-size 50
+  # Purge multiple tags
+  cache-kv-purger cache purge tags --zone example.com --tag product-images --tag category-pages
+
+  # Purge tags from a comma-delimited list
+  cache-kv-purger cache purge tags --zone example.com --tags "tag1,tag2,tag3,tag4" 
+
+  # Purge tags with batch control (max 30 tags per API call)
+  cache-kv-purger cache purge tags --zone example.com --tags "tag1,tag2,tag3,tag4" --batch-size 2
+
+  # Purge tags from a file (CSV, JSON, or text with one tag per line)
+  cache-kv-purger cache purge tags --zone example.com --tags-file tags.csv 
   
   # Dry run (show what would be purged, but don't actually purge)
-  cache-kv-purger cache purge batch-tags --zone example.com --tags-file tags.csv --batch-size 50 --dry-run`,
+  cache-kv-purger cache purge tags --zone example.com --tags-file tags.csv --dry-run`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Get verbose flag once at the beginning
 			verbose, _ := cmd.Flags().GetBool("verbose")
@@ -658,6 +512,32 @@ func createPurgeTagsBatchCmd() *cobra.Command {
 				batchSize = 30 // Cloudflare's default limit is 30
 			}
 
+			// If only a few tags, don't bother with batching
+			if len(allTags) <= batchSize {
+				// Simple case - small number of tags, just do it directly
+				if verbose {
+					fmt.Printf("Purging content with %d tags for zone %s...\n", len(allTags), resolvedZoneID)
+					for i, tag := range allTags {
+						fmt.Printf("  %d. %s\n", i+1, tag)
+					}
+				}
+
+				// Dry run mode
+				if dryRun {
+					fmt.Printf("DRY RUN: Would purge %d tags\n", len(allTags))
+					return nil
+				}
+
+				resp, err := cache.PurgeTags(client, resolvedZoneID, allTags)
+				if err != nil {
+					return fmt.Errorf("failed to purge tags: %w", err)
+				}
+
+				fmt.Printf("Successfully purged content with %d tags. Purge ID: %s\n", len(allTags), resp.Result.ID)
+				return nil
+			}
+
+			// For larger numbers, use batching
 			// Split tags into batches
 			batches := splitIntoBatches(allTags, batchSize)
 
@@ -713,6 +593,82 @@ func createPurgeTagsBatchCmd() *cobra.Command {
 	cmd.Flags().StringVar(&tagsFile, "tags-file", "", "Path to a file containing cache tags to purge (CSV, JSON, or text with one tag per line)")
 	cmd.Flags().IntVar(&batchSize, "batch-size", 30, "Maximum number of tags to purge in each batch (default 30)")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Show what would be purged without actually purging")
+
+	return cmd
+}
+
+// createPurgePrefixesCmd creates a command to purge cache by URL prefix
+func createPurgePrefixesCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "prefixes",
+		Short: "Purge cached content by URL prefix",
+		Long:  `Purge cached content from Cloudflare's edge servers based on URL prefixes.`,
+		Example: `  # Purge a single prefix
+  cache-kv-purger cache purge prefixes --zone example.com --prefix https://example.com/blog/
+
+  # Purge multiple prefixes
+  cache-kv-purger cache purge prefixes --zone example.com --prefix https://example.com/blog/ --prefix https://example.com/products/`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Create API client
+			client, err := api.NewClient()
+			if err != nil {
+				return fmt.Errorf("failed to create API client: %w", err)
+			}
+
+			// Get account ID for resolving zone names
+			accountID := ""
+			cfg, err := config.LoadFromFile("")
+			if err == nil {
+				accountID = cfg.GetAccountID()
+			}
+
+			// Verify prefix flags
+			if len(purgeFlagsVars.prefixes) == 0 {
+				return fmt.Errorf("at least one prefix is required, specify with --prefix")
+			}
+
+			// Get the zone ID from flag, config, or environment variable
+			zoneID := purgeFlagsVars.zoneID
+			if zoneID == "" {
+				// Try to get from the global flag
+				zoneID, _ = cmd.Flags().GetString("zone")
+			}
+
+			if zoneID == "" {
+				// Try to get from config or environment variable
+				if cfg != nil {
+					zoneID = cfg.GetZoneID()
+				}
+			}
+
+			if zoneID == "" {
+				return fmt.Errorf("zone ID is required, specify it with --zone flag, CLOUDFLARE_ZONE_ID environment variable, or set a default zone in config")
+			}
+
+			// Resolve zone (could be name or ID)
+			resolvedZoneID, err := zones.ResolveZoneIdentifier(client, accountID, zoneID)
+			if err != nil {
+				return fmt.Errorf("failed to resolve zone: %w", err)
+			}
+
+			// Purge prefixes
+			verbose, _ := cmd.Flags().GetBool("verbose")
+			if verbose {
+				fmt.Printf("Purging content with %d prefixes for zone %s...\n", len(purgeFlagsVars.prefixes), resolvedZoneID)
+				for i, prefix := range purgeFlagsVars.prefixes {
+					fmt.Printf("  %d. %s\n", i+1, prefix)
+				}
+			}
+
+			resp, err := cache.PurgePrefixes(client, resolvedZoneID, purgeFlagsVars.prefixes)
+			if err != nil {
+				return fmt.Errorf("failed to purge prefixes: %w", err)
+			}
+
+			fmt.Printf("Successfully purged content with %d prefixes. Purge ID: %s\n", len(purgeFlagsVars.prefixes), resp.Result.ID)
+			return nil
+		},
+	}
 
 	return cmd
 }
@@ -1308,7 +1264,6 @@ func init() {
 	purgeCmd.AddCommand(createPurgeFilesCmd())
 	purgeCmd.AddCommand(createPurgeTagsCmd())
 	purgeCmd.AddCommand(createPurgePrefixesCmd())
-	purgeCmd.AddCommand(createPurgeTagsBatchCmd())
 	purgeCmd.AddCommand(createPurgeHostsCmd())
 
 	// Add cache command to root command
