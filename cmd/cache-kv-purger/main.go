@@ -18,9 +18,6 @@ and KV store manipulation.`,
 
 // main is the entry point for the application
 func main() {
-	// Setup all commands in the proper order
-	setupCommands()
-	
 	// Execute the root command
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
