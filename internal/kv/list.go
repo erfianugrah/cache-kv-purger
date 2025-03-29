@@ -36,6 +36,10 @@ func ListKeysWithOptions(client *api.Client, accountID, namespaceID string, opti
 		queryParams = url.Values{}
 
 		if options.Limit > 0 {
+			// Cloudflare API requires a minimum limit of 10
+			if options.Limit < 10 {
+				options.Limit = 10
+			}
 			queryParams.Set("limit", fmt.Sprintf("%d", options.Limit))
 		}
 
@@ -76,17 +80,31 @@ func ListKeysWithOptions(client *api.Client, accountID, namespaceID string, opti
 	return result, nil
 }
 
-// ListAllKeys lists all keys in a KV namespace, handling pagination automatically
-func ListAllKeys(client *api.Client, accountID, namespaceID string, progressCallback func(fetched, total int)) ([]KeyValuePair, error) {
+// ListAllKeysWithOptions lists all keys in a KV namespace, handling pagination automatically with custom options
+func ListAllKeysWithOptions(client *api.Client, accountID, namespaceID string, options *ListKeysOptions, progressCallback func(fetched, total int)) ([]KeyValuePair, error) {
 	var allKeys []KeyValuePair
-	options := &ListKeysOptions{
-		Limit: 1000, // Maximum limit per request
+	
+	// Create options if not provided
+	if options == nil {
+		options = &ListKeysOptions{
+			Limit: 1000, // Maximum limit per request
+		}
+	} else if options.Limit == 0 {
+		options.Limit = 1000 // Ensure a reasonable default
 	}
-
+	
+	// Cloudflare API requires a minimum limit of 10
+	if options.Limit < 10 {
+		options.Limit = 10
+	}
+	
+	// Use a copy of options so we don't modify the original
+	requestOptions := *options
+	
 	totalFetched := 0
 
 	for {
-		result, err := ListKeysWithOptions(client, accountID, namespaceID, options)
+		result, err := ListKeysWithOptions(client, accountID, namespaceID, &requestOptions)
 		if err != nil {
 			return nil, err
 		}
@@ -103,10 +121,15 @@ func ListAllKeys(client *api.Client, accountID, namespaceID string, progressCall
 		}
 
 		// Update cursor for next request
-		options.Cursor = result.Cursor
+		requestOptions.Cursor = result.Cursor
 	}
 
 	return allKeys, nil
+}
+
+// ListAllKeys lists all keys in a KV namespace, handling pagination automatically (legacy function)
+func ListAllKeys(client *api.Client, accountID, namespaceID string, progressCallback func(fetched, total int)) ([]KeyValuePair, error) {
+	return ListAllKeysWithOptions(client, accountID, namespaceID, nil, progressCallback)
 }
 
 // WriteMultipleValues writes multiple values to a KV namespace

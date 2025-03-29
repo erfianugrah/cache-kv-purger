@@ -526,10 +526,26 @@ func createNamespaceBulkDeleteCmd() *cobra.Command {
 }
 
 func createValuesListCmd() *cobra.Command {
+	var prefix string
+	var pageSize int
+	var pageNumber int
+	var limit int
+	
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List keys in a KV namespace",
 		Long:  `List all keys in a KV namespace.`,
+		Example: `  # List first page of keys
+  cache-kv-purger kv values list --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7
+  
+  # List all keys (handle pagination automatically)
+  cache-kv-purger kv values list --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --all
+  
+  # Filter keys by prefix
+  cache-kv-purger kv values list --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --prefix "product-" --all
+  
+  # List keys with pagination control
+  cache-kv-purger kv values list --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --page-size 1000 --page 2`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Get account ID from flag, config, or environment variable
 			accountID := kvFlagsVars.accountID
@@ -580,6 +596,18 @@ func createValuesListCmd() *cobra.Command {
 			verbose, _ := cmd.Flags().GetBool("verbose")
 			if verbose {
 				fmt.Printf("Listing keys in KV namespace '%s'...\n", namespaceID)
+				if prefix != "" {
+					fmt.Printf("Filtering by prefix: %s\n", prefix)
+				}
+				if pageSize > 0 {
+					fmt.Printf("Page size: %d\n", pageSize)
+				}
+				if pageNumber > 0 {
+					fmt.Printf("Page number: %d\n", pageNumber)
+				}
+				if limit > 0 {
+					fmt.Printf("Limit: %d\n", limit)
+				}
 			}
 
 			var keys []kv.KeyValuePair
@@ -596,15 +624,86 @@ func createValuesListCmd() *cobra.Command {
 					}
 				}
 
-				// Use ListAllKeys to automatically handle pagination
-				keys, err = kv.ListAllKeys(client, accountID, namespaceID, progressCallback)
-			} else {
-				// Just get the first page
-				keys, err = kv.ListKeys(client, accountID, namespaceID)
-			}
+				// Set up options for ListAllKeys
+				options := &kv.ListKeysOptions{}
+				if prefix != "" {
+					options.Prefix = prefix
+				}
+				if pageSize > 0 {
+					options.Limit = pageSize
+				}
 
-			if err != nil {
-				return fmt.Errorf("failed to list keys: %w", err)
+				// Use ListAllKeys to automatically handle pagination
+				allKeys, err := kv.ListAllKeys(client, accountID, namespaceID, progressCallback)
+				if err != nil {
+					return fmt.Errorf("failed to list keys: %w", err)
+				}
+				
+				// Apply limit if specified
+				if limit > 0 && len(allKeys) > limit {
+					keys = allKeys[:limit]
+				} else {
+					keys = allKeys
+				}
+			} else {
+				// Set up options for specific pagination
+				options := &kv.ListKeysOptions{}
+				
+				if prefix != "" {
+					options.Prefix = prefix
+				}
+				
+				// Calculate effective page size
+				effectivePageSize := 1000 // Default
+				if pageSize > 0 {
+					effectivePageSize = pageSize
+				}
+				options.Limit = effectivePageSize
+				
+				// Handle pagination
+				if pageNumber > 1 {
+					// We need to fetch pages sequentially to get to the desired page
+					var cursor string
+					for i := 1; i < pageNumber; i++ {
+						tempOptions := &kv.ListKeysOptions{
+							Limit:  effectivePageSize,
+							Cursor: cursor,
+							Prefix: prefix,
+						}
+						result, err := kv.ListKeysWithOptions(client, accountID, namespaceID, tempOptions)
+						if err != nil {
+							return fmt.Errorf("failed to navigate to page %d: %w", pageNumber, err)
+						}
+						
+						if !result.HasMore {
+							return fmt.Errorf("page %d does not exist (only %d pages available)", pageNumber, i)
+						}
+						
+						cursor = result.Cursor
+					}
+					
+					// Now fetch the actual page
+					options.Cursor = cursor
+				}
+				
+				// Apply limit if specified and different from page size
+				if limit > 0 && limit < options.Limit {
+					options.Limit = limit
+				}
+				
+				// Fetch the specified page
+				result, err := kv.ListKeysWithOptions(client, accountID, namespaceID, options)
+				if err != nil {
+					return fmt.Errorf("failed to list keys: %w", err)
+				}
+				
+				keys = result.Keys
+				
+				// Mention pagination info
+				if result.HasMore {
+					fmt.Printf("Note: More keys are available. Use --page %d --page-size %d to see the next page, or use --all to list all keys.\n", 
+						pageNumber+1, effectivePageSize)
+				}
 			}
 
 			// Output result
@@ -623,7 +722,7 @@ func createValuesListCmd() *cobra.Command {
 				fmt.Printf("%d. %s%s\n", i+1, key.Key, expirationStr)
 			}
 
-			if !listAll {
+			if !listAll && pageNumber <= 1 && pageSize == 0 && limit == 0 {
 				fmt.Println("\nNote: Only showing first page of results. Use --all flag to list all keys.")
 			}
 
@@ -634,6 +733,10 @@ func createValuesListCmd() *cobra.Command {
 	cmd.Flags().StringVar(&kvFlagsVars.namespaceID, "namespace-id", "", "ID of the namespace")
 	cmd.Flags().StringVar(&kvFlagsVars.title, "title", "", "Title of the namespace (alternative to namespace-id)")
 	cmd.Flags().Bool("all", false, "List all keys (automatically handle pagination)")
+	cmd.Flags().StringVar(&prefix, "prefix", "", "Filter keys by prefix")
+	cmd.Flags().IntVar(&pageSize, "page-size", 0, "Number of keys per page (max 1000)")
+	cmd.Flags().IntVar(&pageNumber, "page", 0, "Page number to fetch (starting from 1)")
+	cmd.Flags().IntVar(&limit, "limit", 0, "Maximum number of keys to return")
 
 	return cmd
 }
@@ -1193,22 +1296,45 @@ func createUnifiedSearchCmd() *cobra.Command {
 	var outputJSON bool
 	var chunkSize int
 	var concurrency int
+	// We don't need a local verbose var since we use the global one
 	
 	cmd := &cobra.Command{
 		Use:   "search",
 		Short: "Search for keys with powerful filtering, with option to purge",
-		Long:  `Search for keys using powerful filtering options with the ability to also purge matching keys.`,
-		Example: `  # Search for keys containing a value anywhere in metadata
-  cfpurge kv keys search --namespace-id YOUR_NAMESPACE_ID --value "Anam_2.JPG" --metadata
+			Long:  `Search for keys using powerful filtering options with the ability to also purge matching keys.
+
+The search command supports two different search modes:
+
+1. Smart search (--value):
+   - Performs a deep recursive search through all metadata
+   - Finds the value anywhere in the metadata structure (fields, arrays, nested objects)
+   - Case-insensitive matching
+   - Best for general-purpose searching when you do not know the exact field structure
+
+2. Field-specific search (--tag-field and --tag-value):
+   - Searches for a specific field with a specific value
+   - More precise when you know the exact field you want to match
+   - Must specify both the field name and the expected value
+
+Smart search is more powerful for finding content anywhere in the metadata,
+while field-specific search is better for precise field matching.
+
+For detailed progress information during search and purge operations, 
+use the global --verbose flag. This will show:
+- Search progress with matched keys count
+- Batch processing details during purging
+- API operation details and timing information`,
+			Example: `  # Smart search for keys containing value anywhere in metadata (RECOMMENDED)
+  cache-kv-purger kv search --namespace-id YOUR_NAMESPACE_ID --value "your-search-term" --metadata
   
-  # Search for keys with a specific tag (and show metadata)
-  cfpurge kv keys search --namespace-id YOUR_NAMESPACE_ID --tag-field "tags" --tag-value "img-prod-type-image" --metadata
+  # Field-specific search for keys with a specific tag field and value
+  cache-kv-purger kv search --namespace-id YOUR_NAMESPACE_ID --tag-field "cache-tag" --tag-value "your-tag-value" --metadata
   
-  # Search and purge keys (dry run first)
-  cfpurge kv keys search --namespace-id YOUR_NAMESPACE_ID --value "Anam_2.JPG" --purge --dry-run
+  # Smart search and purge keys (dry run first)
+  cache-kv-purger kv search --namespace-id YOUR_NAMESPACE_ID --value "your-search-term" --purge --dry-run
   
-  # Search and purge keys for real
-  cfpurge kv keys search --namespace-id YOUR_NAMESPACE_ID --value "Anam_2.JPG" --purge`,
+  # Smart search and purge keys for real
+  cache-kv-purger kv search --namespace-id YOUR_NAMESPACE_ID --value "your-search-term" --purge`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Get common parameters
 			accountID := kvFlagsVars.accountID
@@ -1499,6 +1625,8 @@ func createUnifiedSearchCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&outputJSON, "json", false, "Output results as JSON")
 	cmd.Flags().IntVar(&chunkSize, "chunk-size", 100, "Size of chunks to process")
 	cmd.Flags().IntVar(&concurrency, "concurrency", 10, "Number of concurrent operations")
+	// Note: We removed this local verbose flag in favor of the global one
+	// cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output for detailed progress")
 	
 	return cmd
 }
@@ -1530,7 +1658,10 @@ func init() {
 	kvCmd.AddCommand(createKVConfigCmd())
 	
 	// Add our unified search command directly to kv command
-	kvCmd.AddCommand(createUnifiedSearchCmd())
+	searchCmd := createUnifiedSearchCmd()
+	// Add usage example for the verbose flag
+	searchCmd.Example += "\n\n  # Smart search with verbose output showing detailed progress\n  cache-kv-purger kv search --namespace-id YOUR_NAMESPACE_ID --value \"your-search-term\" --verbose"
+	kvCmd.AddCommand(searchCmd)
 
 	// Add direct flags to kvCmd for common use cases
 	kvCmd.PersistentFlags().StringVar(&kvFlagsVars.namespaceID, "namespace-id", "", "ID of the namespace")

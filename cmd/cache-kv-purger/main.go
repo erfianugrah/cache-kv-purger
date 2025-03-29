@@ -16,6 +16,12 @@ This tool uses Cloudflare's API to perform various operations related to cache m
 and KV store manipulation.`,
 }
 
+func init() {
+	// Add global flags
+	rootCmd.PersistentFlags().Bool("verbose", false, "Enable verbose output")
+	rootCmd.PersistentFlags().StringP("zone", "z", "", "Cloudflare Zone ID or domain name (required for most commands)")
+}
+
 // main is the entry point for the application
 func main() {
 	// Execute the root command
