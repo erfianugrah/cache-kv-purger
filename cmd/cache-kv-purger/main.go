@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// rootCmd is the base command for the CLI application
 var rootCmd = &cobra.Command{
 	Use:   "cache-kv-purger",
 	Short: "CLI tool for managing Cloudflare cache purging and KV operations",
@@ -15,13 +16,12 @@ This tool uses Cloudflare's API to perform various operations related to cache m
 and KV store manipulation.`,
 }
 
-func init() {
-	// Global flags
-	rootCmd.PersistentFlags().StringP("zone", "z", "", "Cloudflare Zone ID or domain name (required for most commands)")
-	rootCmd.PersistentFlags().Bool("verbose", false, "Enable verbose output")
-}
-
+// main is the entry point for the application
 func main() {
+	// Setup all commands in the proper order
+	setupCommands()
+	
+	// Execute the root command
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
 		os.Exit(1)

@@ -17,6 +17,7 @@ A command-line interface tool for managing Cloudflare cache purging and Workers 
 - [KV Namespace Commands](#kv-namespace-commands)
 - [KV Values Commands](#kv-values-commands)
 - [KV Utility Commands](#kv-utility-commands)
+- [Combined API Commands](#combined-api-commands)
 - [Zone Commands](#zone-commands)
 - [Future Enhancements](#future-enhancements)
 - [Development](#development)
@@ -37,11 +38,26 @@ A command-line interface tool for managing Cloudflare cache purging and Workers 
   - Bulk namespace management with pattern matching
   - Read, write, and delete key-value pairs
   - Metadata and expiration support
+  - Smart key searching with metadata filtering
+  - Recursive searching through nested metadata
+
+- **Combined API Operations**
+  - Execute operations across multiple Cloudflare APIs in one command
+  - Purge both KV keys and cache in a single operation
+  - Smart metadata search integrated with cache purging
+  - Efficient cross-API workflows with unified interface
 
 - **Zone Management**
   - List and query zone information
   - Configure default zones
   - Zone resolution by name or ID
+
+- **Technical Architecture**
+  - Modular codebase with separation of concerns
+  - Command builder pattern for easy extension
+  - Middleware for common operations
+  - Standardized validation and error handling
+  - Configurable batch processing with progress reporting
 
 ## Installation
 
@@ -734,6 +750,30 @@ cache-kv-purger kv get-with-metadata --namespace-id 95bc3e9324ac40fa8b71c4a3016c
 cache-kv-purger kv get-with-metadata --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --key mykey --verbose
 ```
 
+### Search and Filter Keys
+
+Search for keys with advanced filtering capabilities.
+
+```bash
+# Search for keys containing a value anywhere in metadata
+cache-kv-purger kv search --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --value "product-image" --metadata
+
+# Search for keys with a specific tag field
+cache-kv-purger kv search --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --tag-field "tags" --tag-value "product-image" --metadata
+
+# Search and purge keys (dry run first)
+cache-kv-purger kv search --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --value "product-image" --purge --dry-run
+
+# Search and purge keys (actual deletion)
+cache-kv-purger kv search --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --value "product-image" --purge
+
+# Output results as JSON
+cache-kv-purger kv search --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --value "product-image" --json
+
+# Control concurrency and chunk size
+cache-kv-purger kv search --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --value "product-image" --concurrency 20 --chunk-size 200
+```
+
 ### Check If Key Exists
 
 Checks if a key exists in a namespace without retrieving its value.
@@ -856,6 +896,64 @@ cache-kv-purger kv import --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --file
 cache-kv-purger kv import --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --file namespace-backup.json --concurrency 20
 ```
 
+## Combined API Commands
+
+The combined commands provide functionality that spans across multiple Cloudflare APIs, enabling more efficient workflows and unified operations.
+
+### Purge All (KV and Cache)
+
+Purge both KV keys and cache tags in a single operation. This powerful command allows you to:
+
+1. Find KV keys using smart metadata search or specific tag filtering
+2. Delete matching KV keys
+3. Purge cache tags for associated content
+4. All in a single command with batch processing and dry-run support
+
+```bash
+# Purge KV keys with a specific value and cache tags
+cache-kv-purger combined purge-all \
+  --account-id 01a7362d577a6c3019a474fd6f485823 \
+  --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 \
+  --value "product-image" \
+  --zone example.com \
+  --cache-tag product-images
+
+# Purge KV keys with a specific tag field and cache
+cache-kv-purger combined purge-all \
+  --account-id 01a7362d577a6c3019a474fd6f485823 \
+  --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 \
+  --tag-field "tags" \
+  --tag-value "product-image" \
+  --zone example.com \
+  --cache-tag product-images \
+  --cache-tag image-thumbnails
+
+# Dry run to preview changes without actually purging
+cache-kv-purger combined purge-all \
+  --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 \
+  --value "product-image" \
+  --zone example.com \
+  --cache-tag product-images \
+  --dry-run
+
+# Using namespace title instead of ID
+cache-kv-purger combined purge-all \
+  --title "My KV Namespace" \
+  --value "product-image" \
+  --zone example.com \
+  --cache-tag product-images
+
+# Control performance parameters
+cache-kv-purger combined purge-all \
+  --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 \
+  --value "product-image" \
+  --zone example.com \
+  --cache-tag product-images \
+  --concurrency 20 \
+  --chunk-size 200 \
+  --verbose
+```
+
 ## Zone Commands
 
 ### List Zones
@@ -929,10 +1027,44 @@ The tool includes several advanced features for optimizing performance and handl
   - Automatically distributes files to appropriate zones based on hostname
   - Optimizes API calls to minimize rate limit impacts
 
+#### Combined API Operations
+- **Cross-API Operations**: For operations that span multiple Cloudflare APIs
+  - Purge both KV keys and cache tags in a single operation
+  - Smart KV search capabilities with cache tag purging
+  - Consistent interface for multi-API operations
+  - Preview mode with dry-run flag
+
 #### Metadata-Only Operations
 - **Efficient KV Operations**: The tool can perform metadata-only operations that avoid retrieving values
   - Faster performance for purge-by-tag and metadata filtering operations
   - Supports upfront metadata loading for large namespaces to reduce API calls
+
+#### Advanced Architecture
+- **Command Builder Pattern**: Fluent interface for creating commands
+  ```go
+  cmdutil.NewCommand("action", "Short desc", "Long desc")
+    .WithRunE(handler)
+    .WithStringFlag("flag-name", "default", "description", &variable)
+    .WithBoolFlag("dry-run", false, "Run without making changes", &dryRun)
+    .Build()
+  ```
+- **Middleware Pattern**: Pre-processing for common operations
+  ```go
+  // Automatically loads config and creates client
+  cmdutil.WithConfigAndClient(func(cmd *cobra.Command, args []string, 
+                                  cfg *config.Config, client *api.Client) error {
+    // Command implementation with config and client ready to use
+  })
+  ```
+- **Batch Processing**: Configurable processing for large operations
+  ```go
+  processor := common.NewBatchProcessor()
+    .WithBatchSize(batchSize)
+    .WithConcurrency(concurrency)
+    .WithProgressCallback(progressFunc)
+  
+  successful, errors := processor.ProcessStrings(items, processFunc)
+  ```
 
 ### API Behavior and Limitations
 
@@ -987,6 +1119,8 @@ cache-kv-purger kv bulk-delete --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 -
 
 ## Future Enhancements
 
+### Planned Features
+
 The codebase contains supporting functions for several advanced operations that may be exposed as additional commands in future versions:
 
 1. **Bulk uploads**:
@@ -1006,6 +1140,68 @@ The codebase contains supporting functions for several advanced operations that 
    - Search operations with regex pattern matching
    - Cross-namespace operations
 
+### Architectural Enhancements
+
+The codebase has undergone significant architectural improvements that provide a foundation for further enhancements:
+
+1. **Command Organization and Management**:
+   - Centralized command initialization via `commands.go`
+   - Consistent command registration order
+   - Proper initialization of root command and global flags
+   - Structured command setup functions
+
+2. **Command Builder Pattern**:
+   - Fluent interface for creating and configuring commands
+   - Consistent flag definition and command setup
+   - Enhanced readability and maintainability
+   - Simplified command creation process
+   ```go
+   cmdutil.NewCommand("command-name", "Short desc", "Long desc")
+     .WithStringFlag("flag-name", "default", "description", &variable)
+     .WithRunE(handler)
+     .Build()
+   ```
+
+3. **Middleware Pattern**:
+   - Common pre-processing for command handlers
+   - Automatic config loading and API client initialization
+   - Consistent error handling patterns
+   - Dependency injection for command implementations
+   ```go
+   cmdutil.WithConfigAndClient(func(cmd *cobra.Command, args []string, 
+                                 cfg *config.Config, client *api.Client) error {
+     // Command implementation with config and client ready to use
+   })
+   ```
+
+4. **Common Utilities**:
+   - Standardized validation logic (`common/validation.go`)
+   - Consistent user interaction patterns (`common/interaction.go`)
+   - Optimized batch processing (`common/batch.go`)
+   - Common error handling and formatting (`common/errors.go`)
+   - File and URL utilities (`common/cache.go`)
+
+5. **Batch Processing Improvements**:
+   - Configurable batch sizes and concurrency
+   - Fluent configuration interface
+   - Progress reporting callbacks
+   - Error handling and aggregation
+   ```go
+   processor := common.NewBatchProcessor()
+     .WithBatchSize(100)
+     .WithConcurrency(10)
+     .WithProgressCallback(progressFunc)
+   
+   successful, errors := processor.ProcessStrings(items, processFunc)
+   ```
+
+6. **Additional Planned Enhancements**:
+   - Complete command migration to builder pattern
+   - Enhanced batch processing with full concurrency support
+   - Improved testing infrastructure
+   - Developer tools for command generation
+   - Documentation generation from code comments
+
 ## Development
 
 ### Local Setup
@@ -1023,6 +1219,62 @@ go test ./...
 
 # Build the binary
 go build -o cache-kv-purger ./cmd/cache-kv-purger
+```
+
+### Adding New Commands
+
+The tool now includes a command builder pattern that makes it easy to add new commands:
+
+```go
+// 1. Define flag variables
+var commandFlags struct {
+    stringFlag  string
+    boolFlag    bool
+    intFlag     int
+    stringSlice []string
+}
+
+// 2. Create the command with the builder
+func createNewCommand() *cmdutil.CommandBuilder {
+    return cmdutil.NewCommand(
+        "command-name",
+        "Short description",
+        "Long description of the command.",
+    ).WithExample(`  # Example of using the command
+  cache-kv-purger parent-command command-name --flag value
+    
+  # Another example
+  cache-kv-purger parent-command command-name --other-flag`,
+    ).WithRunE(
+        // 3. Use middleware for common pre-processing
+        cmdutil.WithConfigAndClient(commandImplementation),
+    ).WithStringFlag(
+        "string-flag", "default", "Description of the flag", &commandFlags.stringFlag,
+    ).WithBoolFlag(
+        "bool-flag", false, "Description of the boolean flag", &commandFlags.boolFlag,
+    )
+}
+
+// 4. Implement the command function with dependencies injected
+func commandImplementation(cmd *cobra.Command, args []string, cfg *config.Config, client *api.Client) error {
+    // Implementation here
+    
+    // Use common validation
+    accountID, err := common.ValidateAccountID(cmd, cfg)
+    if err != nil {
+        return err
+    }
+    
+    // Use batch processing for large operations
+    processor := common.NewBatchProcessor().
+        WithBatchSize(100).
+        WithProgressCallback(func(completed, total, successful int) {
+            fmt.Printf("Progress: %d/%d\n", completed, total)
+        })
+    
+    // Process items
+    return nil
+}
 ```
 
 ### Code Quality
