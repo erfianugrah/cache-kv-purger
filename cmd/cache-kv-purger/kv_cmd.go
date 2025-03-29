@@ -1181,6 +1181,328 @@ func createKeyExistsCmd() *cobra.Command {
 	return cmd
 }
 
+// createUnifiedSearchCmd creates a unified command that can both find and purge keys
+func createUnifiedSearchCmd() *cobra.Command {
+	// Define flags for the unified command
+	var searchValue string
+	var tagField string
+	var tagValue string
+	var showMetadata bool
+	var purgeMatches bool
+	var dryRun bool
+	var outputJSON bool
+	var chunkSize int
+	var concurrency int
+	
+	cmd := &cobra.Command{
+		Use:   "search",
+		Short: "Search for keys with powerful filtering, with option to purge",
+		Long:  `Search for keys using powerful filtering options with the ability to also purge matching keys.`,
+		Example: `  # Search for keys containing a value anywhere in metadata
+  cfpurge kv keys search --namespace-id YOUR_NAMESPACE_ID --value "Anam_2.JPG" --metadata
+  
+  # Search for keys with a specific tag (and show metadata)
+  cfpurge kv keys search --namespace-id YOUR_NAMESPACE_ID --tag-field "tags" --tag-value "img-prod-type-image" --metadata
+  
+  # Search and purge keys (dry run first)
+  cfpurge kv keys search --namespace-id YOUR_NAMESPACE_ID --value "Anam_2.JPG" --purge --dry-run
+  
+  # Search and purge keys for real
+  cfpurge kv keys search --namespace-id YOUR_NAMESPACE_ID --value "Anam_2.JPG" --purge`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Get common parameters
+			accountID := kvFlagsVars.accountID
+			namespaceID := kvFlagsVars.namespaceID
+			verbose, _ := cmd.Flags().GetBool("verbose")
+			
+			// Validate inputs
+			if accountID == "" {
+				cfg, err := config.LoadFromFile("")
+				if err == nil {
+					accountID = cfg.GetAccountID()
+				}
+				if accountID == "" {
+					return fmt.Errorf("account ID is required")
+				}
+			}
+			
+			if namespaceID == "" {
+				if kvFlagsVars.title != "" {
+					client, err := api.NewClient()
+					if err != nil {
+						return err
+					}
+					ns, err := kv.FindNamespaceByTitle(client, accountID, kvFlagsVars.title)
+					if err != nil {
+						return err
+					}
+					namespaceID = ns.ID
+				} else {
+					return fmt.Errorf("namespace ID is required")
+				}
+			}
+			
+			// Require at least one search criterion
+			if searchValue == "" && tagField == "" {
+				return fmt.Errorf("at least one search criterion is required, specify --value or --tag-field")
+			}
+			
+			// Create API client
+			client, err := api.NewClient()
+			if err != nil {
+				return err
+			}
+			
+			// Find matching keys
+			var matchedKeys []kv.KeyValuePair
+			
+			// If both criteria provided, use smart search first then filter by tag
+			if searchValue != "" && tagField != "" {
+				if verbose {
+					fmt.Printf("Searching for keys with value '%s' and tag field '%s'='%s'...\n", 
+						searchValue, tagField, tagValue)
+				}
+				
+				// Do smart search first
+				searchMatches, err := kv.SmartFindKeysWithValue(
+					client, 
+					accountID, 
+					namespaceID, 
+					searchValue,
+					chunkSize,
+					concurrency, 
+					func(keysFetched, keysProcessed, keysMatched, total int) {
+						if verbose {
+							fmt.Printf("Smart search progress: %d/%d processed, %d matched\n", 
+								keysProcessed, total, keysMatched)
+						}
+					},
+				)
+				
+				if err != nil {
+					return err
+				}
+				
+				// Filter by tag field
+				var filtered []kv.KeyValuePair
+				for _, key := range searchMatches {
+					if key.Metadata != nil {
+						if fieldValue, ok := (*key.Metadata)[tagField]; ok {
+							matched := false
+							
+							// String field
+							if fieldStr, isString := fieldValue.(string); isString {
+								if tagValue == "" || fieldStr == tagValue {
+									matched = true
+								}
+							}
+							
+							// Array field
+							if fieldArray, isArray := fieldValue.([]interface{}); isArray {
+								if tagValue == "" {
+									if len(fieldArray) > 0 {
+										matched = true
+									}
+								} else {
+									for _, item := range fieldArray {
+										if itemStr, ok := item.(string); ok && itemStr == tagValue {
+											matched = true
+											break
+										}
+									}
+								}
+							}
+							
+							if matched {
+								filtered = append(filtered, key)
+							}
+						}
+					}
+				}
+				
+				matchedKeys = filtered
+			} else if searchValue != "" {
+				// Just smart search
+				if verbose {
+					fmt.Printf("Searching for keys with value '%s'...\n", searchValue)
+				}
+				
+				matchedKeys, err = kv.SmartFindKeysWithValue(
+					client, 
+					accountID, 
+					namespaceID, 
+					searchValue,
+					chunkSize,
+					concurrency, 
+					func(keysFetched, keysProcessed, keysMatched, total int) {
+						if verbose {
+							fmt.Printf("Smart search progress: %d/%d processed, %d matched\n", 
+								keysProcessed, total, keysMatched)
+						}
+					},
+				)
+				
+				if err != nil {
+					return err
+				}
+			} else if tagField != "" {
+				// Just tag field search
+				if verbose {
+					fmt.Printf("Searching for keys with tag field '%s'='%s'...\n", tagField, tagValue)
+				}
+				
+				matchedKeys, err = kv.StreamingFilterKeysByMetadata(
+					client,
+					accountID,
+					namespaceID,
+					tagField,
+					tagValue,
+					chunkSize,
+					concurrency,
+					func(keysFetched, keysProcessed, keysMatched, total int) {
+						if verbose {
+							fmt.Printf("Tag filter progress: %d/%d processed, %d matched\n", 
+								keysProcessed, total, keysMatched)
+						}
+					},
+				)
+				
+				if err != nil {
+					return err
+				}
+			}
+			
+			// Check if we found any matches
+			if len(matchedKeys) == 0 {
+				fmt.Println("No keys found matching the search criteria")
+				return nil
+			}
+			
+			// Output results or purge
+			if purgeMatches {
+				// Output what we found first
+				fmt.Printf("Found %d keys matching search criteria\n", len(matchedKeys))
+				
+				// Show sample of keys if not verbose
+				if !verbose {
+					displayCount := 5
+					if len(matchedKeys) < displayCount {
+						displayCount = len(matchedKeys)
+					}
+					
+					for i := 0; i < displayCount; i++ {
+						fmt.Printf("  %d. %s\n", i+1, matchedKeys[i].Key)
+					}
+					
+					if len(matchedKeys) > displayCount {
+						fmt.Printf("  ... and %d more keys\n", len(matchedKeys)-displayCount)
+					}
+				} else {
+					// Show all in verbose mode
+					for i, key := range matchedKeys {
+						fmt.Printf("  %d. %s\n", i+1, key.Key)
+					}
+				}
+				
+				// If dry run, stop here
+				if dryRun {
+					fmt.Printf("\nDRY RUN: Would delete %d keys\n", len(matchedKeys))
+					return nil
+				}
+				
+				// Confirm deletion
+				fmt.Printf("\nAre you sure you want to delete these %d keys? This cannot be undone. [y/N]: ", len(matchedKeys))
+				var confirm string
+				if _, err := fmt.Scanln(&confirm); err != nil || (confirm != "y" && confirm != "Y") {
+					fmt.Println("Operation cancelled")
+					return nil
+				}
+				
+				// Extract key names for deletion
+				keyNames := make([]string, len(matchedKeys))
+				for i, key := range matchedKeys {
+					keyNames[i] = key.Key
+				}
+				
+				// Delete in batches
+				batchSize := 1000 // Cloudflare API limit
+				totalDeleted := 0
+				
+				for i := 0; i < len(keyNames); i += batchSize {
+					end := i + batchSize
+					if end > len(keyNames) {
+						end = len(keyNames)
+					}
+					
+					batch := keyNames[i:end]
+					if err := kv.DeleteMultipleValues(client, accountID, namespaceID, batch); err != nil {
+						return fmt.Errorf("error deleting batch: %w", err)
+					}
+					
+					totalDeleted += len(batch)
+					
+					if verbose {
+						fmt.Printf("Deleted batch %d: %d/%d keys deleted\n", (i/batchSize)+1, totalDeleted, len(keyNames))
+					}
+				}
+				
+				fmt.Printf("Successfully deleted %d keys\n", totalDeleted)
+			} else {
+				// Just output results
+				if outputJSON {
+					// JSON output
+					jsonData, err := json.MarshalIndent(matchedKeys, "", "  ")
+					if err != nil {
+						return fmt.Errorf("failed to format as JSON: %w", err)
+					}
+					fmt.Println(string(jsonData))
+				} else {
+					// Human readable output
+					fmt.Printf("Found %d keys matching search criteria:\n", len(matchedKeys))
+					
+					for i, key := range matchedKeys {
+						fmt.Printf("%d. %s", i+1, key.Key)
+						
+						if key.Expiration > 0 {
+							expirationTime := time.Unix(key.Expiration, 0)
+							fmt.Printf(" (expires: %s)", expirationTime.Format(time.RFC3339))
+						}
+						
+						fmt.Println()
+						
+						if showMetadata && key.Metadata != nil && len(*key.Metadata) > 0 {
+							fmt.Printf("   Metadata:\n")
+							for field, value := range *key.Metadata {
+								fmt.Printf("     %s: %v\n", field, value)
+							}
+						}
+						
+						// Add separator between keys
+						if i < len(matchedKeys)-1 {
+							fmt.Println()
+						}
+					}
+				}
+			}
+			
+			return nil
+		},
+	}
+	
+	// Add flags
+	cmd.Flags().StringVar(&searchValue, "value", "", "Value to search for anywhere in metadata")
+	cmd.Flags().StringVar(&tagField, "tag-field", "", "Metadata field name to filter by")
+	cmd.Flags().StringVar(&tagValue, "tag-value", "", "Value to match in the tag field")
+	cmd.Flags().BoolVarP(&showMetadata, "metadata", "m", false, "Show metadata for matching keys")
+	cmd.Flags().BoolVar(&purgeMatches, "purge", false, "Delete matching keys")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Preview without actually deleting (for --purge)")
+	cmd.Flags().BoolVar(&outputJSON, "json", false, "Output results as JSON")
+	cmd.Flags().IntVar(&chunkSize, "chunk-size", 100, "Size of chunks to process")
+	cmd.Flags().IntVar(&concurrency, "concurrency", 10, "Number of concurrent operations")
+	
+	return cmd
+}
+
 func init() {
 	rootCmd.AddCommand(kvCmd)
 
@@ -1206,6 +1528,9 @@ func init() {
 	kvCmd.AddCommand(createKeyExistsCmd())
 	kvCmd.AddCommand(createGetKeyWithMetadataCmd())
 	kvCmd.AddCommand(createKVConfigCmd())
+	
+	// Add our unified search command directly to kv command
+	kvCmd.AddCommand(createUnifiedSearchCmd())
 
 	// Add direct flags to kvCmd for common use cases
 	kvCmd.PersistentFlags().StringVar(&kvFlagsVars.namespaceID, "namespace-id", "", "ID of the namespace")

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 )
@@ -779,6 +780,286 @@ func processKeyChunkOptimized(client *api.Client, accountID, namespaceID string,
 	wg.Wait()
 
 	return matchedKeys, nil
+}
+
+// SmartMetadataSearch performs a recursive search through metadata for a value
+// This is much more flexible as it doesn't require knowing the exact field structure
+func SmartMetadataSearch(metadata interface{}, searchValue string) bool {
+	if metadata == nil {
+		return false
+	}
+
+	// Case 1: Direct string match (case-insensitive contains)
+	if str, ok := metadata.(string); ok {
+		return strings.Contains(strings.ToLower(str), strings.ToLower(searchValue))
+	}
+
+	// Case 2: Array/slice - check each element
+	if arr, ok := metadata.([]interface{}); ok {
+		for _, item := range arr {
+			if SmartMetadataSearch(item, searchValue) {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Case 3: Map/object - check each value recursively
+	if obj, ok := metadata.(map[string]interface{}); ok {
+		for _, value := range obj {
+			if SmartMetadataSearch(value, searchValue) {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Case 4: KeyValueMetadata type (special case for our structure)
+	if kvmeta, ok := metadata.(*KeyValueMetadata); ok && kvmeta != nil {
+		// Convert to map and check each value
+		for _, value := range *kvmeta {
+			if SmartMetadataSearch(value, searchValue) {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Case 5: Try string conversion for other types
+	// This handles numbers, booleans, etc. by converting to string
+	str := fmt.Sprintf("%v", metadata)
+	return strings.Contains(strings.ToLower(str), strings.ToLower(searchValue))
+}
+
+// SmartFindKeysWithValue finds all keys containing a specific value anywhere in their metadata
+// Much more flexible than field-specific searches
+func SmartFindKeysWithValue(client *api.Client, accountID, namespaceID, searchValue string,
+	chunkSize int, concurrency int, progressCallback func(keysFetched, keysProcessed, keysMatched, total int)) ([]KeyValuePair, error) {
+
+	if accountID == "" {
+		return nil, fmt.Errorf("account ID is required")
+	}
+	if namespaceID == "" {
+		return nil, fmt.Errorf("namespace ID is required")
+	}
+	if chunkSize <= 0 {
+		chunkSize = 100 // Default chunk size
+	}
+	if concurrency <= 0 {
+		concurrency = 10 // Default concurrency
+	}
+
+	// Simple progress callback if none provided
+	if progressCallback == nil {
+		progressCallback = func(keysFetched, keysProcessed, keysMatched, total int) {}
+	}
+
+	// First, list all keys
+	keys, err := ListAllKeys(client, accountID, namespaceID, func(fetched, total int) {
+		progressCallback(fetched, 0, 0, total)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list keys: %w", err)
+	}
+
+	if len(keys) == 0 {
+		return []KeyValuePair{}, nil // Return empty slice, not nil
+	}
+
+	totalKeys := len(keys)
+	var matchedKeys []KeyValuePair
+	totalProcessed := 0
+	totalMatched := 0
+
+	// Create a mutex for thread safety in the concurrent section
+	var mu sync.Mutex
+
+	// Process keys in batches using a worker pool for concurrency
+	var wg sync.WaitGroup
+	semaphore := make(chan struct{}, concurrency)
+	errorsChan := make(chan error, concurrency)
+
+	// Process in chunks
+	for i := 0; i < totalKeys; i += chunkSize {
+		end := i + chunkSize
+		if end > totalKeys {
+			end = totalKeys
+		}
+
+		chunkKeys := keys[i:end]
+		startIdx := i
+
+		// Limit concurrency
+		semaphore <- struct{}{}
+		wg.Add(1)
+
+		go func(chunk []KeyValuePair, chunkStartIdx int) {
+			defer wg.Done()
+			defer func() { <-semaphore }()
+
+			chunkMatched := 0
+			
+			// Process each key in this chunk
+			for j, key := range chunk {
+				processedIdx := chunkStartIdx + j
+				
+				// Step 1: Check if metadata already available from list response
+				if key.Metadata != nil {
+					// Use smart recursive search on the metadata
+					if SmartMetadataSearch(key.Metadata, searchValue) {
+						mu.Lock()
+						matchedKeys = append(matchedKeys, key)
+						totalMatched++
+						chunkMatched++
+						mu.Unlock()
+					}
+				} else {
+					// Step 2: If metadata not in list response, fetch it separately
+					encodedKey := url.PathEscape(key.Key)
+					metadataPath := fmt.Sprintf("/accounts/%s/storage/kv/namespaces/%s/metadata/%s",
+						accountID, namespaceID, encodedKey)
+
+					// Get metadata via API
+					metadataResp, metadataErr := client.Request(http.MethodGet, metadataPath, nil, nil)
+					if metadataErr == nil {
+						var metadataResponse struct {
+							Success bool                   `json:"success"`
+							Result  map[string]interface{} `json:"result"`
+						}
+
+						if err := json.Unmarshal(metadataResp, &metadataResponse); err == nil &&
+							metadataResponse.Success && metadataResponse.Result != nil {
+
+							// Use smart recursive search on the metadata
+							if SmartMetadataSearch(metadataResponse.Result, searchValue) {
+								// Copy the key and add metadata
+								keyCopy := key // Make a copy to avoid modifying the original
+								metadata := KeyValueMetadata(metadataResponse.Result)
+								keyCopy.Metadata = &metadata
+
+								mu.Lock()
+								matchedKeys = append(matchedKeys, keyCopy)
+								totalMatched++
+								chunkMatched++
+								mu.Unlock()
+							}
+						}
+					}
+				}
+				
+				// Update progress periodically (not on every item to reduce overhead)
+				if j%20 == 0 || j == len(chunk)-1 {
+					mu.Lock()
+					// Use max value calculation manually (Go 1.20 and earlier don't have built-in max)
+					if processedIdx+1 > totalProcessed {
+						totalProcessed = processedIdx + 1
+					}
+					progressCallback(totalKeys, totalProcessed, totalMatched, totalKeys)
+					mu.Unlock()
+				}
+			}
+			
+			// Final progress update for this chunk
+			mu.Lock()
+			progressCallback(totalKeys, totalProcessed, totalMatched, totalKeys)
+			mu.Unlock()
+
+		}(chunkKeys, startIdx)
+	}
+
+	// Wait for all chunks to complete
+	wg.Wait()
+	close(errorsChan)
+
+	// Check for errors
+	for err := range errorsChan {
+		if err != nil {
+			return matchedKeys, fmt.Errorf("error during processing: %w", err)
+		}
+	}
+
+	// Final progress update
+	progressCallback(totalKeys, totalKeys, len(matchedKeys), totalKeys)
+
+	return matchedKeys, nil
+}
+
+// SmartPurgeByValue finds and purges all keys containing a specific value in their metadata
+// Much more flexible than field-specific purges
+func SmartPurgeByValue(client *api.Client, accountID, namespaceID, searchValue string,
+	chunkSize int, concurrency int, dryRun bool,
+	progressCallback func(keysFetched, keysProcessed, keysMatched, keysDeleted, total int)) (int, error) {
+
+	if accountID == "" {
+		return 0, fmt.Errorf("account ID is required")
+	}
+	if namespaceID == "" {
+		return 0, fmt.Errorf("namespace ID is required")
+	}
+	if searchValue == "" {
+		return 0, fmt.Errorf("search value is required")
+	}
+	if chunkSize <= 0 {
+		chunkSize = 100 // Default chunk size
+	}
+	if concurrency <= 0 {
+		concurrency = 10 // Default concurrency
+	}
+
+	// Simple progress callback if none provided
+	if progressCallback == nil {
+		progressCallback = func(keysFetched, keysProcessed, keysMatched, keysDeleted, total int) {}
+	}
+
+	// Use our smart find function to locate matching keys
+	matchedKeys, err := SmartFindKeysWithValue(client, accountID, namespaceID, searchValue,
+		chunkSize, concurrency,
+		func(keysFetched, keysProcessed, keysMatched, total int) {
+			progressCallback(keysFetched, keysProcessed, keysMatched, 0, total)
+		})
+	
+	if err != nil {
+		return 0, fmt.Errorf("failed to find keys with value '%s': %w", searchValue, err)
+	}
+
+	// Extract just the key names for deletion
+	keyNames := make([]string, len(matchedKeys))
+	for i, key := range matchedKeys {
+		keyNames[i] = key.Key
+	}
+
+	// If dry run, just return the count
+	if dryRun {
+		return len(keyNames), nil
+	}
+
+	// If no keys matched, we're done
+	if len(keyNames) == 0 {
+		return 0, nil
+	}
+
+	// Purge the keys in batches for efficiency
+	totalDeleted := 0
+	batchSize := 1000 // Cloudflare API limit
+
+	// Process keys in batches of 1000
+	for i := 0; i < len(keyNames); i += batchSize {
+		end := i + batchSize
+		if end > len(keyNames) {
+			end = len(keyNames)
+		}
+
+		batch := keyNames[i:end]
+		err := DeleteMultipleValues(client, accountID, namespaceID, batch)
+		if err != nil {
+			return totalDeleted, fmt.Errorf("error deleting batch of keys %d-%d: %w", i, end-1, err)
+		}
+
+		totalDeleted += len(batch)
+		progressCallback(len(matchedKeys), len(matchedKeys), len(matchedKeys), totalDeleted, len(matchedKeys))
+	}
+
+	return totalDeleted, nil
 }
 
 // Note: FetchAllMetadata function is defined in export.go and not duplicated here
