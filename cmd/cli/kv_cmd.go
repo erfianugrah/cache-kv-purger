@@ -1635,8 +1635,9 @@ use the global --verbose flag. This will show:
 // addMissingValueValidation adds a special validation for commands to ensure flags
 // have values when specified and displays better error messages
 func addMissingValueValidation(cmd *cobra.Command) {
-	// Store the original RunE if it exists
+	// Store the original functions if they exist
 	originalRunE := cmd.RunE
+	originalRun := cmd.Run
 	
 	// Replace with our validation
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
@@ -1682,8 +1683,16 @@ func addMissingValueValidation(cmd *cobra.Command) {
 		// Run the original function
 		if originalRunE != nil {
 			return originalRunE(cmd, args)
+		} else if originalRun != nil {
+			// If the command used Run instead of RunE, call it and return nil
+			originalRun(cmd, args)
 		}
 		return nil
+	}
+	
+	// Clear the original Run function to avoid duplication
+	if cmd.Run != nil {
+		cmd.Run = nil
 	}
 	
 	// Recursively add to all subcommands
