@@ -39,7 +39,7 @@ jobs:
         cache: true
 
     - name: Build
-      run: go build -v -o ${{ matrix.output }} ./cmd/cache-kv-purger
+      run: go build -v -o ${{ matrix.output }} ./cmd/cli
       env:
         GOOS: ${{ matrix.GOOS }}
         GOARCH: ${{ matrix.GOARCH }}

@@ -14,13 +14,13 @@ A command-line interface tool for managing Cloudflare cache purging and Workers 
 - [Configuration](#configuration)
 - [Global Commands](#global-commands)
 - [Cache Commands](#cache-commands)
-- [KV Commands](#kv-commands)
-- [Legacy KV Commands](#legacy-kv-commands)
-- [KV Utility Commands](#kv-utility-commands)
+- [KV Commands Overview](#kv-commands-overview)
 - [Combined API Commands](#combined-api-commands)
 - [Zone Commands](#zone-commands)
+- [Advanced Features](#advanced-features)
 - [Future Enhancements](#future-enhancements)
 - [Development](#development)
+- [Documentation & References](#documentation--references)
 - [License](#license)
 
 ## Features
@@ -552,159 +552,121 @@ cache-kv-purger cache purge custom --zone example.com \
   --verbose
 ```
 
-## Legacy KV Commands
+## KV Commands Overview
 
-> **Note**: The legacy KV command structure (namespace, values, etc.) has been completely removed from the codebase. Please use the new verb-based command structure described in the [KV Command Guide](KV_COMMAND_GUIDE.md).
+The tool uses a verb-based command structure for KV operations that follows intuitive naming patterns. This provides a simplified, more discoverable interface for managing KV namespaces and key-value pairs.
 
-The legacy commands have been replaced with more intuitive verb-based commands:
+> **Note**: The legacy KV command structure (namespace, values, etc.) has been completely removed from the codebase.
 
-- To list namespaces: `kv list`
-- To create a namespace: `kv create`
-- To delete a namespace: `kv delete --namespace NAME --namespace-itself`
-- To rename a namespace: `kv rename`
-- To bulk delete namespaces: `kv delete --bulk --pattern "test-*"`
-- To list keys: `kv list --namespace NAME`
-- To get a value: `kv get --key KEY`
-- To put a value: `kv put --key KEY --value VALUE`
-- To delete a value: `kv delete --key KEY`
-- To search for keys: `kv list --search VALUE` (enhanced with deep recursive metadata search)
+For comprehensive documentation, see the [KV Documentation](KV_DOCUMENTATION.md).
 
-## KV Commands
+### Command Structure
 
-The tool uses a verb-based KV command structure for a simpler, more intuitive interface. These commands follow a consistent pattern and support both namespace name and ID resolution.
+```
+cache-kv-purger kv <command> [flags]
+```
 
-For detailed documentation, see the [KV Command Guide](KV_COMMAND_GUIDE.md).
+The main commands are:
 
-### List Command
+| Command    | Description                                   |
+|------------|-----------------------------------------------|
+| `list`     | List namespaces or keys with filtering options |
+| `get`      | Get values for keys (single or bulk)           |
+| `put`      | Put values for keys (single or bulk)           |
+| `delete`   | Delete keys or namespaces (single or bulk)     |
+| `create`   | Create namespaces                              |
+| `rename`   | Rename namespaces                              |
+| `config`   | Configure default settings                     |
 
-List namespaces or keys in a namespace.
+### Key Features
 
+- **Unified verb-based commands** for intuitive operation
+- **Powerful search capabilities** including deep recursive metadata search
+- **Namespace resolution by name** - use names or IDs interchangeably
+- **Combined single and bulk operations** within the same commands
+- **Consistent flag patterns** across all commands
+- **Advanced filtering options** for efficient operations
+
+### Example Usage
+
+List, search, and filter operations:
 ```bash
 # List all namespaces
 cache-kv-purger kv list --account-id YOUR_ACCOUNT_ID
 
-# List keys in a namespace by ID
+# List keys in a namespace (by name or ID)
 cache-kv-purger kv list --namespace-id YOUR_NAMESPACE_ID
-
-# List keys in a namespace by name
 cache-kv-purger kv list --namespace "My Namespace"
 
-# List keys with a prefix
-cache-kv-purger kv list --namespace "My Namespace" --prefix "product-"
-
-# List keys with metadata
-cache-kv-purger kv list --namespace-id YOUR_NAMESPACE_ID --metadata
-
-# Deep search for keys with value anywhere in metadata (recursive search)
+# Deep recursive metadata search
 cache-kv-purger kv list --namespace-id YOUR_NAMESPACE_ID --search "product-image"
 
-# Search for keys with specific metadata field
+# Filter by metadata field and value
 cache-kv-purger kv list --namespace-id YOUR_NAMESPACE_ID --tag-field "status" --tag-value "archived"
 ```
 
-### Get Command
-
-Get values for one or more keys from a KV namespace.
-
+Get operations:
 ```bash
-# Get a single key
-cache-kv-purger kv get --namespace-id YOUR_NAMESPACE_ID --key mykey
+# Get a single key with metadata
+cache-kv-purger kv get --namespace-id YOUR_NAMESPACE_ID --key mykey --metadata
 
-# Get a key with metadata
-cache-kv-purger kv get --namespace "My Namespace" --key mykey --metadata
-
-# Get multiple keys matching a prefix
-cache-kv-purger kv get --namespace-id YOUR_NAMESPACE_ID --bulk --prefix "product-"
-
-# Get keys matching a pattern
-cache-kv-purger kv get --namespace-id YOUR_NAMESPACE_ID --bulk --pattern "product-.*-v1"
+# Bulk get with pattern matching
+cache-kv-purger kv get --namespace-id YOUR_NAMESPACE_ID --bulk --prefix "config-" --metadata
 ```
 
-### Put Command
-
-Put values for one or more keys in a KV namespace.
-
+Write operations:
 ```bash
-# Put a single key
+# Write a single value
 cache-kv-purger kv put --namespace-id YOUR_NAMESPACE_ID --key mykey --value "My value"
 
-# Put a value from a file
-cache-kv-purger kv put --namespace "My Namespace" --key config.json --file ./config.json
-
-# Put with expiration
-cache-kv-purger kv put --namespace-id YOUR_NAMESPACE_ID --key temp-key --value "temp" --expiration-ttl 3600
-
-# Bulk put from JSON file
-cache-kv-purger kv put --namespace-id YOUR_NAMESPACE_ID --bulk --file data.json
+# Write from file with expiration
+cache-kv-purger kv put --namespace "My Namespace" --key config.json --file ./config.json --expiration-ttl 3600
 ```
 
-### Delete Command
-
-Delete one or more keys from a KV namespace, or delete a namespace itself.
-
+Delete operations:
 ```bash
 # Delete a single key
 cache-kv-purger kv delete --namespace-id YOUR_NAMESPACE_ID --key mykey
 
-# Delete the namespace itself
+# Delete namespace
 cache-kv-purger kv delete --namespace "My Namespace" --namespace-itself
 
-# Delete keys with a prefix (dry run first)
-cache-kv-purger kv delete --namespace-id YOUR_NAMESPACE_ID --bulk --prefix "temp-" --dry-run
-
-# Delete keys with deep recursive metadata search
-cache-kv-purger kv delete --namespace-id YOUR_NAMESPACE_ID --bulk --search "old-data" --force
-
-# Delete keys with specific metadata field/value
-cache-kv-purger kv delete --namespace-id YOUR_NAMESPACE_ID --bulk --tag-field "status" --tag-value "archived"
+# Bulk delete with search (dry run first)
+cache-kv-purger kv delete --namespace-id YOUR_NAMESPACE_ID --bulk --search "old-data" --dry-run
 ```
 
-### Namespace Command
+Namespace operations:
+```bash
+# Create namespace
+cache-kv-purger kv create --title "My New Namespace"
 
-Operations specific to namespaces.
+# Rename namespace
+cache-kv-purger kv rename --namespace "Old Name" --title "New Name"
+```
+
+### Deep Search Capabilities
+
+Both the `list` and `delete` commands now feature advanced recursive metadata search:
 
 ```bash
-# Create a new namespace
-cache-kv-purger kv namespace create --account-id YOUR_ACCOUNT_ID --title "My Namespace"
-
-# Rename a namespace
-cache-kv-purger kv namespace rename --namespace-id YOUR_NAMESPACE_ID --title "New Name"
-
-# Rename a namespace by name
-cache-kv-purger kv namespace rename --namespace "Old Name" --title "New Name"
+# Search recursively through complex nested metadata structures
+cache-kv-purger kv list --namespace-id YOUR_NAMESPACE_ID --search "product-tag" --metadata
 ```
 
-## KV Utility Commands
+This searches through:
+- All levels of nested objects and arrays
+- All value types (strings, numbers, booleans)
+- Case-insensitive matching for better results
 
-The verb-based command structure now contains all the functionality previously in utility commands:
+### Tips for KV Operations
 
-- To get metadata: `kv get --key KEY --metadata`
-- To check if a key exists: `kv get --key KEY --check-exists`
-- To configure KV settings: `kv config`
+1. Use `--namespace` (name) instead of `--namespace-id` for better readability
+2. Always use `--dry-run` before bulk deletion operations
+3. For large operations, tune `--batch-size` and `--concurrency` 
+4. Use `--metadata` with search operations to see matching structures
+5. When json formatting is needed, use the `--json` flag
 
-### Search and Filter Keys
-
-The search capabilities are now integrated into the list and delete commands:
-
-```bash
-# Deep recursive search in metadata (equivalent to old search command)
-cache-kv-purger kv list --namespace-id YOUR_NAMESPACE_ID --search "product-image" --metadata
-
-# Search for keys with a specific tag field
-cache-kv-purger kv list --namespace-id YOUR_NAMESPACE_ID --tag-field "tags" --tag-value "product-image" --metadata
-
-# Search and delete keys (dry run first)
-cache-kv-purger kv delete --namespace-id YOUR_NAMESPACE_ID --bulk --search "product-image" --dry-run
-
-# Search and delete keys (actual deletion)
-cache-kv-purger kv delete --namespace-id YOUR_NAMESPACE_ID --bulk --search "product-image"
-
-# Output results as JSON
-cache-kv-purger kv list --namespace-id YOUR_NAMESPACE_ID --search "product-image" --json
-
-# Control concurrency and batch size
-cache-kv-purger kv list --namespace-id YOUR_NAMESPACE_ID --search "product-image" --concurrency 20 --batch-size 200
-```
+For detailed command options and more examples, see the [KV Command Guide](KV_COMMAND_GUIDE.md).
 
 ### Bulk Operations
 
@@ -758,19 +720,22 @@ Deletes multiple keys in optimized batches.
 
 ```bash
 # Delete keys from a text file (one key per line)
-cache-kv-purger kv bulk-delete --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --keys-file keys-to-delete.txt
+cache-kv-purger kv delete --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --bulk --keys-file keys-to-delete.txt
 
 # Delete keys matching a prefix
-cache-kv-purger kv bulk-delete --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --prefix "temp-"
+cache-kv-purger kv delete --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --bulk --prefix "temp-"
 
 # Delete with custom batch size and concurrency
-cache-kv-purger kv bulk-delete --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --keys-file keys-to-delete.txt --batch-size 1000 --concurrency 10
+cache-kv-purger kv delete --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --bulk --keys-file keys-to-delete.txt --batch-size 1000 --concurrency 10
 
-# Delete keys by metadata tag (keys with metadata containing specific tag value)
-cache-kv-purger kv bulk-delete --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --metadata-field "cache-tag" --metadata-value "products-old"
+# Delete keys by metadata tag
+cache-kv-purger kv delete --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --bulk --tag-field "cache-tag" --tag-value "products-old"
+
+# Delete keys with deep recursive metadata search
+cache-kv-purger kv delete --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --bulk --search "product-old" --dry-run
 
 # Dry run (show what would be deleted without actually deleting)
-cache-kv-purger kv bulk-delete --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --prefix "temp-" --dry-run
+cache-kv-purger kv delete --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --bulk --prefix "temp-" --dry-run
 ```
 
 #### Export and Import
@@ -1210,6 +1175,13 @@ git push origin main
 git tag v1.0.0
 git push origin v1.0.0
 ```
+
+## Documentation & References
+
+- **[KV Documentation](KV_DOCUMENTATION.md)** - Comprehensive guide to the KV commands
+- **[LICENSE](LICENSE)** - MIT License details
+- **Additional Reference Materials** - Located in the `references/` directory:
+  - `references/internal/` - Internal design documents and improvement tracking
 
 ## License
 
