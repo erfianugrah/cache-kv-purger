@@ -16,7 +16,8 @@ This document provides comprehensive information about the KV commands in the ca
    - [Config Command](#config-command)
 4. [Enhanced Search Capabilities](#enhanced-search-capabilities)
 5. [Transition Guide](#transition-guide)
-6. [Best Practices](#best-practices)
+6. [Sync Operations](#sync-operations)
+7. [Best Practices](#best-practices)
 
 ## Command Structure Overview
 
@@ -303,6 +304,55 @@ For bulk `put` operations, the input file should be a JSON array of objects with
 ]
 ```
 
+## Sync Operations
+
+The tool provides powerful combined commands that span multiple Cloudflare APIs, enabling more efficient workflows and unified operations.
+
+### Sync Purge Command
+
+The `sync purge` command allows you to:
+
+1. Find KV keys using metadata search or specific tag filtering
+2. Delete matching KV keys
+3. Purge cache tags for associated content
+4. All in a single operation with batch processing and dry-run support
+
+```bash
+# Purge KV keys with a specific search value and related cache tags 
+cache-kv-purger sync purge --namespace-id YOUR_NAMESPACE_ID --search "product-123" --zone example.com --cache-tag product-images
+
+# Use metadata field-specific search and purge cache
+cache-kv-purger sync purge --namespace-id YOUR_NAMESPACE_ID --tag-field "type" --tag-value "temp" --zone example.com --cache-tag temp-data
+  
+# Dry run to preview without making changes
+cache-kv-purger sync purge --namespace-id YOUR_NAMESPACE_ID --search "product-123" --zone example.com --cache-tag product-images --dry-run
+
+# Using namespace name instead of ID
+cache-kv-purger sync purge --namespace "My KV Namespace" --search "product-123" --zone example.com --cache-tag product-images
+```
+
+This command is ideal for maintaining consistency between your KV storage and CDN cache, particularly useful for:
+
+- Content updates where both storage and cache must be updated
+- Maintenance operations requiring synchronized data removal
+- Feature deployments that need to ensure fresh cache content
+
+**How it works:**
+1. First searches for matching KV keys using either deep recursive search or field-specific matching
+2. Shows a preview of matched keys (with sample output for large sets)
+3. Deletes the matching KV keys (unless in dry-run mode)
+4. Purges specified cache tags from the CDN in the same operation
+
+**Common flags:**
+- `--namespace-id` or `--namespace`: Target namespace ID or name
+- `--search`: Value to search for in KV metadata (deep recursive search)
+- `--tag-field` and `--tag-value`: For field-specific metadata search 
+- `--zone`: Zone ID or domain for cache operations
+- `--cache-tag`: Cache tags to purge (can be specified multiple times)
+- `--dry-run`: Preview changes without making them
+- `--concurrency`: Control the number of concurrent operations
+- `--batch-size`: Set the batch size for KV operations
+
 ## Best Practices
 
 1. **Use namespace names**: Use `--namespace` (name) instead of `--namespace-id` for better readability
@@ -311,7 +361,8 @@ For bulk `put` operations, the input file should be a JSON array of objects with
 4. **Metadata visibility**: Use `--metadata` with search operations to see matching structures
 5. **Deep search**: Use `--search` without `--tag-field` for powerful recursive searches through complex metadata
 6. **JSON formatting**: When machine-readable output is needed, use the `--json` flag
-7. **Migration strategy**: 
+7. **Synchronized operations**: Use the `sync purge` command when you need to update both KV and cache in sync
+8. **Migration strategy**: 
    - Update scripts to use the new command format
    - Test commands with `--dry-run` or non-destructive flags first
    - Update internal documentation to reference the new command structure

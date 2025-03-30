@@ -15,7 +15,7 @@ A command-line interface tool for managing Cloudflare cache purging and Workers 
 - [Global Commands](#global-commands)
 - [Cache Commands](#cache-commands)
 - [KV Commands Overview](#kv-commands-overview)
-- [Combined API Commands](#combined-api-commands)
+- [Sync Operations](#sync-operations)
 - [Zone Commands](#zone-commands)
 - [Advanced Features](#advanced-features)
 - [Future Enhancements](#future-enhancements)
@@ -756,13 +756,13 @@ cache-kv-purger kv import --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --file
 cache-kv-purger kv import --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --file namespace-backup.json --concurrency 20
 ```
 
-## Combined API Commands
+## Sync Operations
 
-The combined commands provide functionality that spans across multiple Cloudflare APIs, enabling more efficient workflows and unified operations.
+The sync commands provide functionality that spans across multiple Cloudflare APIs, enabling more efficient workflows and synchronized operations.
 
-### Purge All (KV and Cache)
+### Sync Purge 
 
-Purge both KV keys and cache tags in a single operation. This powerful command allows you to:
+Synchronize KV and cache by purging both KV keys and cache tags in a single operation. This powerful command allows you to:
 
 1. Find KV keys using smart metadata search or specific tag filtering
 2. Delete matching KV keys
@@ -770,47 +770,26 @@ Purge both KV keys and cache tags in a single operation. This powerful command a
 4. All in a single command with batch processing and dry-run support
 
 ```bash
-# Purge KV keys with a specific value and cache tags
-cache-kv-purger combined purge-all \
-  --account-id 01a7362d577a6c3019a474fd6f485823 \
-  --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 \
-  --value "product-image" \
-  --zone example.com \
-  --cache-tag product-images
+# Purge KV keys with a specific search value and related cache tags 
+cache-kv-purger sync purge --namespace-id YOUR_NAMESPACE_ID --search "product-123" --zone example.com --cache-tag product-images
 
-# Purge KV keys with a specific tag field and cache
-cache-kv-purger combined purge-all \
-  --account-id 01a7362d577a6c3019a474fd6f485823 \
-  --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 \
-  --tag-field "tags" \
-  --tag-value "product-image" \
-  --zone example.com \
-  --cache-tag product-images \
-  --cache-tag image-thumbnails
+# Use metadata field-specific search and purge cache
+cache-kv-purger sync purge --namespace-id YOUR_NAMESPACE_ID --tag-field "type" --tag-value "temp" --zone example.com --cache-tag temp-data
+  
+# Dry run to preview without making changes
+cache-kv-purger sync purge --namespace-id YOUR_NAMESPACE_ID --search "product-123" --zone example.com --cache-tag product-images --dry-run
 
-# Dry run to preview changes without actually purging
-cache-kv-purger combined purge-all \
-  --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 \
-  --value "product-image" \
-  --zone example.com \
-  --cache-tag product-images \
-  --dry-run
+# Using namespace name instead of ID for better readability
+cache-kv-purger sync purge --namespace "My KV Namespace" --search "product-123" --zone example.com --cache-tag product-images
 
-# Using namespace title instead of ID
-cache-kv-purger combined purge-all \
-  --title "My KV Namespace" \
-  --value "product-image" \
-  --zone example.com \
-  --cache-tag product-images
-
-# Control performance parameters
-cache-kv-purger combined purge-all \
-  --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 \
-  --value "product-image" \
+# Control performance parameters for large operations
+cache-kv-purger sync purge \
+  --namespace-id YOUR_NAMESPACE_ID \
+  --search "product-123" \
   --zone example.com \
   --cache-tag product-images \
   --concurrency 20 \
-  --chunk-size 200 \
+  --batch-size 200 \
   --verbose
 ```
 
