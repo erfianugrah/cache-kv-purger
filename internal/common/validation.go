@@ -9,8 +9,13 @@ import (
 )
 
 // ValidateAccountID ensures a valid account ID is available
-func ValidateAccountID(cmd *cobra.Command, cfg *config.Config) (string, error) {
-	// First try to get from flag
+func ValidateAccountID(cmd *cobra.Command, cfg *config.Config, providedID ...string) (string, error) {
+	// First check if we were provided an account ID directly
+	if len(providedID) > 0 && providedID[0] != "" {
+		return providedID[0], nil
+	}
+
+	// Next try to get from flag
 	accountID, _ := cmd.Flags().GetString("account-id")
 	
 	// If not in flag, try from config

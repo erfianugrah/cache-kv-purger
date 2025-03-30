@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"os"
 	"time"
 )
@@ -1631,33 +1632,135 @@ use the global --verbose flag. This will show:
 	return cmd
 }
 
+// addMissingValueValidation adds a special validation for commands to ensure flags
+// have values when specified and displays better error messages
+func addMissingValueValidation(cmd *cobra.Command) {
+	// Store the original RunE if it exists
+	originalRunE := cmd.RunE
+	
+	// Replace with our validation
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		// Check if --help is present anywhere in the arguments
+		// This ensures help takes precedence over validation errors
+		for _, arg := range os.Args {
+			if arg == "--help" || arg == "-h" {
+				cmd.Help()
+				return nil
+			}
+		}
+		
+		// Check for help flag before validation
+		if help, _ := cmd.Flags().GetBool("help"); help {
+			cmd.Help()
+			return nil
+		}
+		
+		// Check for flags with missing values
+		var missingValues []string
+		cmd.Flags().Visit(func(f *pflag.Flag) {
+			// Only check string flags
+			if f.Value.Type() == "string" {
+				// If the flag's value starts with a dash and it's the actual value
+				// (not just an empty string), it might be an argument
+				if f.Value.String() != "" && f.Value.String()[0] == '-' {
+					missingValues = append(missingValues, f.Name)
+				}
+			}
+		})
+		
+		if len(missingValues) > 0 {
+			// Check if this is a help request again to avoid showing errors
+			for _, flag := range missingValues {
+				if flag == "help" || flag == "h" {
+					cmd.Help()
+					return nil
+				}
+			}
+			return fmt.Errorf("missing values for flags: %v", missingValues)
+		}
+		
+		// Run the original function
+		if originalRunE != nil {
+			return originalRunE(cmd, args)
+		}
+		return nil
+	}
+	
+	// Recursively add to all subcommands
+	for _, subCmd := range cmd.Commands() {
+		addMissingValueValidation(subCmd)
+	}
+}
+
 func init() {
 	rootCmd.AddCommand(kvCmd)
 
 	// Add common flags to kv command
 	kvCmd.PersistentFlags().StringVar(&kvFlagsVars.accountID, "account-id", "", "Cloudflare Account ID")
-
-	// Add namespace commands
-	kvCmd.AddCommand(kvNamespaceCmd)
-	kvNamespaceCmd.AddCommand(createNamespaceListCmd())
-	kvNamespaceCmd.AddCommand(createNamespaceCreateCmd())
-	kvNamespaceCmd.AddCommand(createNamespaceDeleteCmd())
-	kvNamespaceCmd.AddCommand(createNamespaceRenameCmd())
-	kvNamespaceCmd.AddCommand(createNamespaceBulkDeleteCmd())
-
-	// Add values commands
-	kvCmd.AddCommand(kvValuesCmd)
-	kvValuesCmd.AddCommand(createValuesListCmd())
-	kvValuesCmd.AddCommand(createValuesGetCmd())
-	kvValuesCmd.AddCommand(createValuesPutCmd())
-	kvValuesCmd.AddCommand(createValuesDeleteCmd())
-
-	// Add utility commands directly to kvCmd for better discoverability
-	kvCmd.AddCommand(createKeyExistsCmd())
-	kvCmd.AddCommand(createGetKeyWithMetadataCmd())
-	kvCmd.AddCommand(createKVConfigCmd())
 	
-	// Add our unified search command directly to kv command
+	// Add validation for missing values to all KV commands
+	addMissingValueValidation(kvCmd)
+
+	// Mark old command structures as deprecated but keep them for backward compatibility
+	// Add namespace commands with deprecation notice
+	kvNamespaceCmd.Deprecated = "Use the new verb-based commands instead: 'kv list', 'kv create', 'kv rename', 'kv delete'"
+	kvCmd.AddCommand(kvNamespaceCmd)
+	
+	// Add and mark deprecated subcommands
+	nsList := createNamespaceListCmd()
+	nsList.Deprecated = "Use 'kv list' instead"
+	kvNamespaceCmd.AddCommand(nsList)
+	
+	nsCreate := createNamespaceCreateCmd()
+	nsCreate.Deprecated = "Use 'kv create' instead"
+	kvNamespaceCmd.AddCommand(nsCreate)
+	
+	nsDelete := createNamespaceDeleteCmd()
+	nsDelete.Deprecated = "Use 'kv delete' instead"
+	kvNamespaceCmd.AddCommand(nsDelete)
+	
+	nsRename := createNamespaceRenameCmd()
+	nsRename.Deprecated = "Use 'kv rename' instead"
+	kvNamespaceCmd.AddCommand(nsRename)
+	
+	nsBulkDelete := createNamespaceBulkDeleteCmd()
+	nsBulkDelete.Deprecated = "Use 'kv delete --bulk' instead"
+	kvNamespaceCmd.AddCommand(nsBulkDelete)
+
+	// Add values commands with deprecation notice
+	kvValuesCmd.Deprecated = "Use the new verb-based commands instead: 'kv get', 'kv put', 'kv delete', 'kv list'"
+	kvCmd.AddCommand(kvValuesCmd)
+	
+	// Add and mark deprecated subcommands
+	valList := createValuesListCmd()
+	valList.Deprecated = "Use 'kv list --namespace NAME' instead"
+	kvValuesCmd.AddCommand(valList)
+	
+	valGet := createValuesGetCmd()
+	valGet.Deprecated = "Use 'kv get' instead"
+	kvValuesCmd.AddCommand(valGet)
+	
+	valPut := createValuesPutCmd()
+	valPut.Deprecated = "Use 'kv put' instead"
+	kvValuesCmd.AddCommand(valPut)
+	
+	valDelete := createValuesDeleteCmd()
+	valDelete.Deprecated = "Use 'kv delete' instead"
+	kvValuesCmd.AddCommand(valDelete)
+
+	// Keep utility commands for backward compatibility
+	// Don't add createKVConfigCmd() as it conflicts with the new config command
+	
+	// Utility commands with deprecation notices
+	existsCmd := createKeyExistsCmd()
+	existsCmd.Deprecated = "Use 'kv get --check-exists' instead"
+	kvCmd.AddCommand(existsCmd)
+	
+	metadataCmd := createGetKeyWithMetadataCmd()
+	metadataCmd.Deprecated = "Use 'kv get --metadata' instead"
+	kvCmd.AddCommand(metadataCmd)
+	
+	// Add our unified search command directly to kv command (this is still useful and unique)
 	searchCmd := createUnifiedSearchCmd()
 	// Add usage example for the verbose flag
 	searchCmd.Example += "\n\n  # Smart search with verbose output showing detailed progress\n  cache-kv-purger kv search --namespace-id YOUR_NAMESPACE_ID --value \"your-search-term\" --verbose"

@@ -51,6 +51,16 @@
    - Enhancement: Add optional interactive prompts for destructive operations
    - Impact: Safer operations with confirmation workflows
 
+4. **Improved UX for Command Help** ✅ IMPLEMENTED
+   - Previous behavior displayed errors when --help was combined with incomplete flags
+   - Enhancement: Prioritize help output over validation errors
+   - Implementation:
+     - ✅ Added special handling for --help flags to ensure they always work
+     - ✅ Improved error messages for flags that require values
+     - ✅ Enhanced flag validation to warn users about missing values
+     - ✅ Made help text more descriptive by marking which flags require values
+   - Impact: Users can more easily understand command usage and get help
+
 ## Code Architecture Improvements
 
 1. **Complete Command Builder Migration**
@@ -67,6 +77,38 @@
    - Current operations lack context.Context integration
    - Enhancement: Add context support for cancellation and timeouts
    - Impact: Better control over long-running operations
+
+4. **KV Command Consolidation** ✅ IMPLEMENTED
+   - Current structure has separate commands for closely related operations
+   - Enhancement: Consolidate KV commands with a more intuitive verb-based structure
+     - Create unified verb-based commands (`list`, `get`, `put`, `delete`) that work on both namespaces and keys
+     - Support both single and bulk operations in the same commands based on flags
+     - Add namespace name resolution to avoid requiring IDs
+   - Implementation:
+     - Created consolidated verb-based command structure
+     - Added namespace resolution by name or ID
+     - Combined bulk and single operations in the same commands
+     - Provided improved documentation in KV_COMMAND_GUIDE.md
+   - Impact: More intuitive command structure, reduced command complexity, better discoverability
+
+5. **KV Code Refactoring** ✅ IMPLEMENTED
+   - Current implementation needed reorganization to align with consolidated commands
+   - Enhancement: Refactor KV code to follow the consolidated verb-based command structure
+   - Implementation:
+     - ✅ Created unified service layer (KVService interface in service.go)
+     - ✅ Implemented namespace resolution across all operations
+     - ✅ Added support for both single and bulk operations through the same interfaces
+     - ✅ Implemented list command using unified approach
+     - ✅ Implemented get command using unified approach
+     - ✅ Implemented put command using unified approach
+     - ✅ Implemented delete command using unified approach
+     - ✅ Implemented create namespace command using unified approach
+     - ✅ Implemented rename namespace command using unified approach
+     - ✅ Implemented config command using unified approach
+     - ✅ Reorganized operations into verb-based files (get.go, put.go, delete.go, list.go)
+     - ✅ Marked old commands as deprecated with specific pointers to new commands
+     - 🚧 Need to update tests and documentation (future work)
+   - Impact: Better maintainability, more consistent interfaces, easier extension
 
 ## Documentation Enhancements
 

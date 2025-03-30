@@ -14,6 +14,7 @@ A command-line interface tool for managing Cloudflare cache purging and Workers 
 - [Configuration](#configuration)
 - [Global Commands](#global-commands)
 - [Cache Commands](#cache-commands)
+- [Unified KV Commands](#unified-kv-commands)
 - [KV Namespace Commands](#kv-namespace-commands)
 - [KV Values Commands](#kv-values-commands)
 - [KV Utility Commands](#kv-utility-commands)
@@ -40,6 +41,9 @@ A command-line interface tool for managing Cloudflare cache purging and Workers 
   - Metadata and expiration support
   - Smart key searching with metadata filtering
   - Recursive searching through nested metadata
+  - **NEW** Intuitive verb-based commands (list, get, put, delete)
+  - **NEW** Support for both single and bulk operations in the same commands
+  - **NEW** Namespace resolution by name or ID without explicit lookups
 
 - **Combined API Operations**
   - Execute operations across multiple Cloudflare APIs in one command
@@ -87,7 +91,7 @@ git clone https://github.com/erfianugrah/cache-kv-purger.git
 cd cache-kv-purger
 
 # Build the binary
-go build -o cache-kv-purger ./cmd/cache-kv-purger
+go build -o cache-kv-purger ./cmd/cli
 
 # Run the tool
 ./cache-kv-purger
@@ -728,6 +732,105 @@ cache-kv-purger kv values delete --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7
 
 # With verbose output
 cache-kv-purger kv values delete --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --key mykey --verbose
+```
+
+## Unified KV Commands
+
+The tool uses a consolidated verb-based KV command structure for a simpler, more intuitive interface. These commands follow a consistent pattern and support both namespace name and ID resolution. The legacy command structure is still available but marked as deprecated.
+
+For detailed documentation, see the [KV Command Guide](KV_COMMAND_GUIDE.md).
+
+### List Command
+
+List namespaces or keys in a namespace.
+
+```bash
+# List all namespaces
+cache-kv-purger kv list --account-id YOUR_ACCOUNT_ID
+
+# List keys in a namespace by ID
+cache-kv-purger kv list --namespace-id YOUR_NAMESPACE_ID
+
+# List keys in a namespace by name
+cache-kv-purger kv list --namespace "My Namespace"
+
+# List keys with a prefix
+cache-kv-purger kv list --namespace "My Namespace" --prefix "product-"
+
+# List keys with metadata
+cache-kv-purger kv list --namespace-id YOUR_NAMESPACE_ID --metadata
+
+# Search for keys containing a value
+cache-kv-purger kv list --namespace-id YOUR_NAMESPACE_ID --search "product-image"
+```
+
+### Get Command
+
+Get values for one or more keys from a KV namespace.
+
+```bash
+# Get a single key
+cache-kv-purger kv get --namespace-id YOUR_NAMESPACE_ID --key mykey
+
+# Get a key with metadata
+cache-kv-purger kv get --namespace "My Namespace" --key mykey --metadata
+
+# Get multiple keys matching a prefix
+cache-kv-purger kv get --namespace-id YOUR_NAMESPACE_ID --bulk --prefix "product-"
+
+# Get keys matching a pattern
+cache-kv-purger kv get --namespace-id YOUR_NAMESPACE_ID --bulk --pattern "product-.*-v1"
+```
+
+### Put Command
+
+Put values for one or more keys in a KV namespace.
+
+```bash
+# Put a single key
+cache-kv-purger kv put --namespace-id YOUR_NAMESPACE_ID --key mykey --value "My value"
+
+# Put a value from a file
+cache-kv-purger kv put --namespace "My Namespace" --key config.json --file ./config.json
+
+# Put with expiration
+cache-kv-purger kv put --namespace-id YOUR_NAMESPACE_ID --key temp-key --value "temp" --expiration-ttl 3600
+
+# Bulk put from JSON file
+cache-kv-purger kv put --namespace-id YOUR_NAMESPACE_ID --bulk --file data.json
+```
+
+### Delete Command
+
+Delete one or more keys from a KV namespace, or delete a namespace itself.
+
+```bash
+# Delete a single key
+cache-kv-purger kv delete --namespace-id YOUR_NAMESPACE_ID --key mykey
+
+# Delete the namespace itself
+cache-kv-purger kv delete --namespace "My Namespace" --namespace-itself
+
+# Delete keys with a prefix (dry run first)
+cache-kv-purger kv delete --namespace-id YOUR_NAMESPACE_ID --bulk --prefix "temp-" --dry-run
+
+# Delete keys matching a search pattern
+cache-kv-purger kv delete --namespace-id YOUR_NAMESPACE_ID --bulk --search "old-data" --force
+```
+
+### Namespace Command
+
+Operations specific to namespaces.
+
+```bash
+# Create a new namespace
+cache-kv-purger kv namespace create --account-id YOUR_ACCOUNT_ID --title "My Namespace"
+
+# Rename a namespace
+cache-kv-purger kv namespace rename --namespace-id YOUR_NAMESPACE_ID --title "New Name"
+
+# Rename a namespace by name
+cache-kv-purger kv namespace rename --namespace "Old Name" --title "New Name"
 ```
 
 ## KV Utility Commands
