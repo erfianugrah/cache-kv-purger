@@ -55,6 +55,9 @@ When used with --bulk, deletes multiple keys based on filters.
 
   # Delete keys by metadata (with confirmation)
   cache-kv-purger kv delete --namespace-id YOUR_NAMESPACE_ID --bulk --tag-field "status" --tag-value "archived"
+
+  # Smart search and delete (powerful recursive metadata search)
+  cache-kv-purger kv delete --namespace-id YOUR_NAMESPACE_ID --bulk --search "product-tag"
 `).WithStringFlag(
 		"account-id", "", "Cloudflare account ID", &opts.accountID,
 	).WithStringFlag(
@@ -76,7 +79,7 @@ When used with --bulk, deletes multiple keys based on filters.
 	).WithStringFlag(
 		"pattern", "", "Delete keys matching regex pattern", &opts.pattern,
 	).WithStringFlag(
-		"search", "", "Delete keys containing this value", &opts.searchValue,
+		"search", "", "Delete keys containing this value (deep recursive search in metadata)", &opts.searchValue,
 	).WithStringFlag(
 		"tag-field", "", "Delete keys with this metadata field", &opts.tagField,
 	).WithStringFlag(
@@ -222,7 +225,93 @@ When used with --bulk, deletes multiple keys based on filters.
 				}
 			}
 
-			// Set up bulk delete options
+			// Check if we have filtering criteria without explicit keys
+			hasFilteringCriteria := opts.prefix != "" || opts.pattern != "" || opts.tagField != "" || opts.tagValue != "" || opts.searchValue != ""
+			
+			// Check for the enhanced "deep search" capability
+			if opts.searchValue != "" && opts.tagField == "" {
+				// This is a deep recursive metadata search (similar to the old search command)
+				// This is more powerful when you don't know the exact metadata structure
+				
+				// Use the service.Search directly
+				searchOptions := kv.SearchOptions{
+					SearchValue:     opts.searchValue,
+					IncludeMetadata: true,
+					BatchSize:       opts.batchSize,
+					Concurrency:     opts.concurrency,
+				}
+				
+				// Find matching keys first
+				matchingKeys, err := service.Search(cmd.Context(), accountID, opts.namespaceID, searchOptions)
+				if err != nil {
+					return fmt.Errorf("search operation failed: %w", err)
+				}
+
+				if len(matchingKeys) == 0 {
+					fmt.Println("No keys found matching the search criteria.")
+					return nil
+				}
+
+				// Extract key names only for deletion
+				keyNames := make([]string, len(matchingKeys))
+				for i, key := range matchingKeys {
+					keyNames[i] = key.Key
+				}
+				
+				// Confirm deletion unless --force is used
+				if !opts.force {
+					fmt.Printf("Found %d keys matching '%s'.\n", len(keyNames), opts.searchValue)
+					fmt.Println("Sample matched keys:")
+					
+					// Show the first few keys as samples
+					sampleSize := 5
+					if len(keyNames) < sampleSize {
+						sampleSize = len(keyNames)
+					}
+					
+					for i := 0; i < sampleSize; i++ {
+						fmt.Printf("  - %s\n", keyNames[i])
+					}
+					
+					if len(keyNames) > sampleSize {
+						fmt.Printf("  - ... and %d more\n", len(keyNames) - sampleSize)
+					}
+					
+					fmt.Print("\nAre you sure you want to delete these keys? This action cannot be undone. [y/N]: ")
+					
+					reader := bufio.NewReader(os.Stdin)
+					confirmation, _ := reader.ReadString('\n')
+					confirmation = strings.TrimSpace(strings.ToLower(confirmation))
+					
+					if confirmation != "y" && confirmation != "yes" {
+						fmt.Println("Deletion cancelled.")
+						return nil
+					}
+				}
+				
+				if opts.dryRun {
+					fmt.Printf("DRY RUN: Would delete %d keys matching '%s'.\n", len(keyNames), opts.searchValue)
+					return nil
+				}
+				
+				// Delete the keys
+				deleteOptions := kv.BulkDeleteOptions{
+					BatchSize:   opts.batchSize,
+					Concurrency: opts.concurrency,
+					DryRun:      false, // We handle dry run above
+					Force:       true,  // We already confirmed
+				}
+				
+				count, err := service.BulkDelete(cmd.Context(), accountID, opts.namespaceID, keyNames, deleteOptions)
+				if err != nil {
+					return fmt.Errorf("bulk delete operation failed: %w", err)
+				}
+				
+				fmt.Printf("Successfully deleted %d/%d keys matching '%s'\n", count, len(keyNames), opts.searchValue)
+				return nil
+			}
+
+			// Regular bulk delete with options
 			bulkDeleteOptions := kv.BulkDeleteOptions{
 				BatchSize:   opts.batchSize,
 				Concurrency: opts.concurrency,
@@ -232,11 +321,11 @@ When used with --bulk, deletes multiple keys based on filters.
 				Pattern:     opts.pattern,
 				TagField:    opts.tagField,
 				TagValue:    opts.tagValue,
-				SearchValue: opts.searchValue,
+				SearchValue: opts.searchValue, // This is less powerful than the deep search above
 			}
 
-			// If we have advanced filtering criteria but no explicit keys
-			if len(keys) == 0 && (opts.prefix != "" || opts.pattern != "" || opts.tagField != "" || opts.searchValue != "") {
+			// If we have filtering criteria but no explicit keys
+			if len(keys) == 0 && hasFilteringCriteria {
 				// We'll let the service handle finding matching keys
 				count, err := service.BulkDelete(cmd.Context(), accountID, opts.namespaceID, nil, bulkDeleteOptions)
 				if err != nil {
@@ -251,7 +340,7 @@ When used with --bulk, deletes multiple keys based on filters.
 				return nil
 			}
 
-			// If we have explicit keys but no advanced filtering
+			// If we have explicit keys
 			if len(keys) > 0 {
 				// Confirm deletion unless --force is used
 				if !opts.force {
@@ -283,7 +372,7 @@ When used with --bulk, deletes multiple keys based on filters.
 				return nil
 			}
 
-			return fmt.Errorf("no keys specified for bulk deletion")
+			return fmt.Errorf("no keys specified for bulk deletion. Use --key, --keys, --keys-file, --prefix, --pattern, or --search")
 		}),
 	)
 }

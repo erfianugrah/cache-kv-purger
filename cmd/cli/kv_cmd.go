@@ -1709,71 +1709,10 @@ func init() {
 	
 	// Add validation for missing values to all KV commands
 	addMissingValueValidation(kvCmd)
-
-	// Mark old command structures as deprecated but keep them for backward compatibility
-	// Add namespace commands with deprecation notice
-	kvNamespaceCmd.Deprecated = "Use the new verb-based commands instead: 'kv list', 'kv create', 'kv rename', 'kv delete'"
-	kvCmd.AddCommand(kvNamespaceCmd)
 	
-	// Add and mark deprecated subcommands
-	nsList := createNamespaceListCmd()
-	nsList.Deprecated = "Use 'kv list' instead"
-	kvNamespaceCmd.AddCommand(nsList)
-	
-	nsCreate := createNamespaceCreateCmd()
-	nsCreate.Deprecated = "Use 'kv create' instead"
-	kvNamespaceCmd.AddCommand(nsCreate)
-	
-	nsDelete := createNamespaceDeleteCmd()
-	nsDelete.Deprecated = "Use 'kv delete' instead"
-	kvNamespaceCmd.AddCommand(nsDelete)
-	
-	nsRename := createNamespaceRenameCmd()
-	nsRename.Deprecated = "Use 'kv rename' instead"
-	kvNamespaceCmd.AddCommand(nsRename)
-	
-	nsBulkDelete := createNamespaceBulkDeleteCmd()
-	nsBulkDelete.Deprecated = "Use 'kv delete --bulk' instead"
-	kvNamespaceCmd.AddCommand(nsBulkDelete)
-
-	// Add values commands with deprecation notice
-	kvValuesCmd.Deprecated = "Use the new verb-based commands instead: 'kv get', 'kv put', 'kv delete', 'kv list'"
-	kvCmd.AddCommand(kvValuesCmd)
-	
-	// Add and mark deprecated subcommands
-	valList := createValuesListCmd()
-	valList.Deprecated = "Use 'kv list --namespace NAME' instead"
-	kvValuesCmd.AddCommand(valList)
-	
-	valGet := createValuesGetCmd()
-	valGet.Deprecated = "Use 'kv get' instead"
-	kvValuesCmd.AddCommand(valGet)
-	
-	valPut := createValuesPutCmd()
-	valPut.Deprecated = "Use 'kv put' instead"
-	kvValuesCmd.AddCommand(valPut)
-	
-	valDelete := createValuesDeleteCmd()
-	valDelete.Deprecated = "Use 'kv delete' instead"
-	kvValuesCmd.AddCommand(valDelete)
-
-	// Keep utility commands for backward compatibility
-	// Don't add createKVConfigCmd() as it conflicts with the new config command
-	
-	// Utility commands with deprecation notices
-	existsCmd := createKeyExistsCmd()
-	existsCmd.Deprecated = "Use 'kv get --check-exists' instead"
-	kvCmd.AddCommand(existsCmd)
-	
-	metadataCmd := createGetKeyWithMetadataCmd()
-	metadataCmd.Deprecated = "Use 'kv get --metadata' instead"
-	kvCmd.AddCommand(metadataCmd)
-	
-	// Add our unified search command directly to kv command (this is still useful and unique)
-	searchCmd := createUnifiedSearchCmd()
-	// Add usage example for the verbose flag
-	searchCmd.Example += "\n\n  # Smart search with verbose output showing detailed progress\n  cache-kv-purger kv search --namespace-id YOUR_NAMESPACE_ID --value \"your-search-term\" --verbose"
-	kvCmd.AddCommand(searchCmd)
+	// Note: Legacy KV commands have been removed.
+	// We now only use the consolidated verb-based commands registered in kv_consolidated_cmd.go
+	// The search command registration is also moved to kv_consolidated_cmd.go
 
 	// Add direct flags to kvCmd for common use cases
 	kvCmd.PersistentFlags().StringVar(&kvFlagsVars.namespaceID, "namespace-id", "", "ID of the namespace")

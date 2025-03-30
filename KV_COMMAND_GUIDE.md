@@ -1,12 +1,12 @@
 # KV Command Guide
 
-This document provides a guide to using the consolidated KV command structure in the cache-kv-purger CLI tool.
+This document provides a guide to using the verb-based KV command structure in the cache-kv-purger CLI tool.
 
 ## Overview
 
-The KV commands have been reorganized to follow a simpler, more intuitive verb-based structure. This means that instead of having deeply nested subcommands, you now have primary verb commands (`list`, `get`, `put`, `delete`) that work on both namespaces and keys.
+The KV commands follow a simple, intuitive verb-based structure. Instead of having deeply nested subcommands, you have primary verb commands (`list`, `get`, `put`, `delete`) that work on both namespaces and keys.
 
-> **Note**: The legacy command structure (e.g., `kv namespace list`, `kv values get`) is still available but marked as deprecated. All legacy commands will display a deprecation notice directing users to the equivalent consolidated command.
+> **Note**: The legacy command structure (e.g., `kv namespace list`, `kv values get`) has been removed. All KV operations now use the verb-based command structure described in this guide.
 
 ## Benefits
 
@@ -61,8 +61,11 @@ cache-kv-purger kv list --namespace "My Namespace" --prefix "product-"
 # List keys with metadata
 cache-kv-purger kv list --namespace-id YOUR_NAMESPACE_ID --metadata
 
-# Search for keys containing a value
+# Deep search for keys with value anywhere in metadata (recursive search)
 cache-kv-purger kv list --namespace-id YOUR_NAMESPACE_ID --search "product-image"
+
+# Search for keys with specific metadata field
+cache-kv-purger kv list --namespace-id YOUR_NAMESPACE_ID --tag-field "status" --tag-value "archived"
 ```
 
 Flags:
@@ -70,7 +73,7 @@ Flags:
 - `--namespace`: Name of the namespace to list keys from
 - `--prefix`: List only keys with this prefix
 - `--pattern`: List only keys matching this regex pattern
-- `--search`: Value to search for anywhere in metadata
+- `--search`: Value to search for recursively in metadata (deep search)
 - `--tag-field`: Metadata field name to filter by
 - `--tag-value`: Value to match in the tag field
 - `--metadata`: Include metadata with keys
@@ -154,8 +157,11 @@ cache-kv-purger kv delete --namespace "My Namespace" --namespace-itself
 # Delete keys with a prefix (dry run first)
 cache-kv-purger kv delete --namespace-id YOUR_NAMESPACE_ID --bulk --prefix "temp-" --dry-run
 
-# Delete keys matching a search pattern
+# Delete keys with deep recursive metadata search
 cache-kv-purger kv delete --namespace-id YOUR_NAMESPACE_ID --bulk --search "old-data" --force
+
+# Delete keys with specific metadata field/value
+cache-kv-purger kv delete --namespace-id YOUR_NAMESPACE_ID --bulk --tag-field "status" --tag-value "archived"
 ```
 
 Flags:
@@ -166,7 +172,7 @@ Flags:
 - `--bulk`: Delete multiple keys based on filters
 - `--prefix`: Delete keys with this prefix
 - `--pattern`: Delete keys matching this pattern
-- `--search`: Delete keys containing this value
+- `--search`: Delete keys containing this value (deep recursive search)
 - `--tag-field`: Delete keys with this metadata field
 - `--tag-value`: Delete keys with this metadata field value
 - `--dry-run`: Show what would be deleted without deleting
@@ -233,21 +239,17 @@ For bulk `put` operations, the input file should be a JSON array of objects with
 
 5. **Performance Tuning**: Adjust `--batch-size` and `--concurrency` for large operations
 
-## Legacy Command Mapping
+## Command Reference Quick Guide
 
-Here's a mapping of legacy commands to their consolidated equivalents:
+Here's a quick reference of the available KV commands:
 
-| Legacy Command | Consolidated Command |
-|----------------|----------------------|
-| `kv namespace list` | `kv list` |
-| `kv namespace create` | `kv create` |
-| `kv namespace delete` | `kv delete --namespace NAME --namespace-itself` |
-| `kv namespace rename` | `kv rename` |
-| `kv values list` | `kv list --namespace NAME` |
-| `kv values get` | `kv get` |
-| `kv values put` | `kv put` |
-| `kv values delete` | `kv delete` |
-| `kv exists` | `kv get --check-exists` |
-| `kv get-with-metadata` | `kv get --metadata` |
+| Command | Description | Example |
+|---------|-------------|---------|
+| `kv list` | List namespaces or keys | `kv list` or `kv list --namespace NAME` |
+| `kv create` | Create a namespace | `kv create --title "My Namespace"` |
+| `kv delete` | Delete keys or namespaces | `kv delete --key KEY` or `kv delete --namespace NAME --namespace-itself` |
+| `kv rename` | Rename a namespace | `kv rename --namespace NAME --title "New Name"` |
+| `kv get` | Get key values | `kv get --key KEY` or `kv get --key KEY --metadata` |
+| `kv put` | Write key values | `kv put --key KEY --value VALUE` |
 
-All legacy commands are marked as deprecated but will continue to work for backward compatibility.
+Note: Legacy commands have been removed from the codebase.

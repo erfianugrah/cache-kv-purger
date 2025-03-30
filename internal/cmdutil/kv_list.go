@@ -54,8 +54,11 @@ When used with --namespace-id or --namespace, lists keys in the specified namesp
   # List keys with metadata
   cache-kv-purger kv list --namespace-id YOUR_NAMESPACE_ID --metadata
 
-  # Search for keys containing a value
+  # Search for keys containing a value (deep recursive search in metadata)
   cache-kv-purger kv list --namespace-id YOUR_NAMESPACE_ID --search "product-image"
+  
+  # Search for keys with specific metadata field
+  cache-kv-purger kv list --namespace-id YOUR_NAMESPACE_ID --tag-field "status" --tag-value "archived"
 `).WithStringFlag(
 		"account-id", "", "Cloudflare account ID", &opts.accountID,
 	).WithStringFlag(
@@ -77,7 +80,7 @@ When used with --namespace-id or --namespace, lists keys in the specified namesp
 	).WithBoolFlag(
 		"values", false, "Include values with keys (slower for large result sets)", &opts.values,
 	).WithStringFlag(
-		"search", "", "Search for keys containing this value", &opts.searchValue,
+		"search", "", "Search for keys containing this value (deep recursive search in metadata)", &opts.searchValue,
 	).WithStringFlag(
 		"tag-field", "", "Metadata field to filter by", &opts.tagField,
 	).WithStringFlag(
@@ -177,6 +180,9 @@ When used with --namespace-id or --namespace, lists keys in the specified namesp
 				var keys []kv.KeyValuePair
 				var err error
 
+				// Check for the enhanced "deep search" capability
+				fmt.Println("Searching for keys...")
+				
 				searchOptions := kv.SearchOptions{
 					SearchValue:     opts.searchValue,
 					TagField:        opts.tagField,
@@ -184,6 +190,17 @@ When used with --namespace-id or --namespace, lists keys in the specified namesp
 					IncludeMetadata: opts.metadata,
 					BatchSize:       opts.batchSize,
 					Concurrency:     opts.concurrency,
+				}
+
+				// If search value provided without tag field, indicate we're doing a deep recursive search
+				if opts.searchValue != "" && opts.tagField == "" {
+					fmt.Printf("Performing deep recursive metadata search for '%s'...\n", opts.searchValue)
+				} else if opts.tagField != "" {
+					if opts.tagValue != "" {
+						fmt.Printf("Searching for keys with metadata field '%s' matching '%s'...\n", opts.tagField, opts.tagValue)
+					} else {
+						fmt.Printf("Searching for keys with metadata field '%s'...\n", opts.tagField)
+					}
 				}
 
 				keys, err = service.Search(cmd.Context(), accountID, opts.namespaceID, searchOptions)
@@ -197,16 +214,48 @@ When used with --namespace-id or --namespace, lists keys in the specified namesp
 				}
 
 				// Table format
-				fmt.Printf("Found %d matching keys:\n", len(keys))
-				fmt.Println("Key\tExpiration")
-				fmt.Println("-------------------------------------------------")
-				for _, key := range keys {
-					expStr := ""
-					if key.Expiration > 0 {
-						expStr = fmt.Sprintf("%d", key.Expiration)
-					}
-					fmt.Printf("%s\t%s\n", key.Key, expStr)
+				fmt.Printf("\nFound %d matching keys:\n", len(keys))
+				
+				// If we have no results, exit early
+				if len(keys) == 0 {
+					fmt.Println("No keys match the search criteria.")
+					return nil
 				}
+				
+				// If metadata is requested, show a more detailed table
+				if opts.metadata {
+					fmt.Println("Key\tExpiration\tMetadata")
+					fmt.Println("-------------------------------------------------")
+					for _, key := range keys {
+						expStr := ""
+						if key.Expiration > 0 {
+							expStr = fmt.Sprintf("%d", key.Expiration)
+						}
+						
+						metaStr := "<none>"
+						if key.Metadata != nil {
+							metaStr = fmt.Sprintf("%v", *key.Metadata)
+						}
+						
+						fmt.Printf("%s\t%s\t%s\n", key.Key, expStr, metaStr)
+					}
+				} else {
+					fmt.Println("Key\tExpiration")
+					fmt.Println("-------------------------------------------------")
+					for _, key := range keys {
+						expStr := ""
+						if key.Expiration > 0 {
+							expStr = fmt.Sprintf("%d", key.Expiration)
+						}
+						fmt.Printf("%s\t%s\n", key.Key, expStr)
+					}
+				}
+				
+				// Include note about metadata
+				if !opts.metadata && len(keys) > 0 {
+					fmt.Println("\nTip: Use --metadata to see metadata for these keys")
+				}
+				
 				return nil
 			}
 

@@ -14,9 +14,8 @@ A command-line interface tool for managing Cloudflare cache purging and Workers 
 - [Configuration](#configuration)
 - [Global Commands](#global-commands)
 - [Cache Commands](#cache-commands)
-- [Unified KV Commands](#unified-kv-commands)
-- [KV Namespace Commands](#kv-namespace-commands)
-- [KV Values Commands](#kv-values-commands)
+- [KV Commands](#kv-commands)
+- [Legacy KV Commands](#legacy-kv-commands)
 - [KV Utility Commands](#kv-utility-commands)
 - [Combined API Commands](#combined-api-commands)
 - [Zone Commands](#zone-commands)
@@ -553,190 +552,26 @@ cache-kv-purger cache purge custom --zone example.com \
   --verbose
 ```
 
-## KV Namespace Commands
+## Legacy KV Commands
 
-### List Namespaces
+> **Note**: The legacy KV command structure (namespace, values, etc.) has been completely removed from the codebase. Please use the new verb-based command structure described in the [KV Command Guide](KV_COMMAND_GUIDE.md).
 
-Lists all KV namespaces in an account.
+The legacy commands have been replaced with more intuitive verb-based commands:
 
-```bash
-# Basic usage
-cache-kv-purger kv namespace list --account-id 01a7362d577a6c3019a474fd6f485823
+- To list namespaces: `kv list`
+- To create a namespace: `kv create`
+- To delete a namespace: `kv delete --namespace NAME --namespace-itself`
+- To rename a namespace: `kv rename`
+- To bulk delete namespaces: `kv delete --bulk --pattern "test-*"`
+- To list keys: `kv list --namespace NAME`
+- To get a value: `kv get --key KEY`
+- To put a value: `kv put --key KEY --value VALUE`
+- To delete a value: `kv delete --key KEY`
+- To search for keys: `kv list --search VALUE` (enhanced with deep recursive metadata search)
 
-# Using default account ID from config
-cache-kv-purger kv namespace list
+## KV Commands
 
-# With verbose output
-cache-kv-purger kv namespace list --verbose
-```
-
-### Create Namespace
-
-Creates a new KV namespace.
-
-```bash
-# Basic usage
-cache-kv-purger kv namespace create --account-id 01a7362d577a6c3019a474fd6f485823 --title "My Application Cache"
-
-# Using default account ID from config
-cache-kv-purger kv namespace create --title "My Application Cache"
-
-# With verbose output
-cache-kv-purger kv namespace create --title "My Application Cache" --verbose
-```
-
-### Delete Namespace
-
-Deletes a KV namespace.
-
-```bash
-# Using namespace ID
-cache-kv-purger kv namespace delete --account-id 01a7362d577a6c3019a474fd6f485823 --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7
-
-# Using namespace title
-cache-kv-purger kv namespace delete --account-id 01a7362d577a6c3019a474fd6f485823 --title "My Application Cache"
-
-# Using default account ID from config
-cache-kv-purger kv namespace delete --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7
-
-# With verbose output
-cache-kv-purger kv namespace delete --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --verbose
-```
-
-### Rename Namespace
-
-Renames a KV namespace.
-
-```bash
-# Basic usage
-cache-kv-purger kv namespace rename --account-id 01a7362d577a6c3019a474fd6f485823 --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --title "New Name"
-
-# Using default account ID from config
-cache-kv-purger kv namespace rename --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --title "New Name"
-
-# With verbose output
-cache-kv-purger kv namespace rename --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --title "New Name" --verbose
-```
-
-### Bulk Delete Namespaces
-
-Deletes multiple KV namespaces matching a pattern or specific IDs.
-
-```bash
-# Delete by pattern with dry-run (preview only)
-cache-kv-purger kv namespace bulk-delete --account-id 01a7362d577a6c3019a474fd6f485823 --pattern "test-*" --dry-run
-
-# Delete by pattern with confirmation
-cache-kv-purger kv namespace bulk-delete --account-id 01a7362d577a6c3019a474fd6f485823 --pattern "test-*"
-
-# Delete by pattern without confirmation
-cache-kv-purger kv namespace bulk-delete --account-id 01a7362d577a6c3019a474fd6f485823 --pattern "test-*" --force
-
-# Delete specific namespace IDs
-cache-kv-purger kv namespace bulk-delete --account-id 01a7362d577a6c3019a474fd6f485823 --namespace-ids "id1,id2,id3"
-
-# With verbose output
-cache-kv-purger kv namespace bulk-delete --account-id 01a7362d577a6c3019a474fd6f485823 --pattern "test-*" --verbose
-```
-
-## KV Values Commands
-
-### List Keys
-
-Lists keys in a KV namespace.
-
-```bash
-# List first page of keys
-cache-kv-purger kv values list --account-id 01a7362d577a6c3019a474fd6f485823 --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7
-
-# List all keys (handle pagination automatically)
-cache-kv-purger kv values list --account-id 01a7362d577a6c3019a474fd6f485823 --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --all
-
-# Using namespace title instead of ID
-cache-kv-purger kv values list --account-id 01a7362d577a6c3019a474fd6f485823 --title "My Application Cache"
-
-# Using default account ID from config
-cache-kv-purger kv values list --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --all
-
-# With verbose output
-cache-kv-purger kv values list --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --all --verbose
-
-# Filter keys by prefix
-cache-kv-purger kv values list --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --prefix "product-" --all
-
-# List keys with pagination control
-cache-kv-purger kv values list --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --page-size 1000 --page 2
-```
-
-### Get Value
-
-Gets a value for a key.
-
-```bash
-# Basic usage
-cache-kv-purger kv values get --account-id 01a7362d577a6c3019a474fd6f485823 --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --key mykey
-
-# Using namespace title instead of ID
-cache-kv-purger kv values get --account-id 01a7362d577a6c3019a474fd6f485823 --title "My Application Cache" --key mykey
-
-# Using default account ID from config
-cache-kv-purger kv values get --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --key mykey
-
-# With verbose output
-cache-kv-purger kv values get --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --key mykey --verbose
-
-# Redirect output to file
-cache-kv-purger kv values get --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --key mykey > output.json
-```
-
-### Put Value
-
-Writes a value for a key.
-
-```bash
-# Using direct value
-cache-kv-purger kv values put --account-id 01a7362d577a6c3019a474fd6f485823 --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --key mykey --value "My value data"
-
-# Using file input
-cache-kv-purger kv values put --account-id 01a7362d577a6c3019a474fd6f485823 --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --key config-json --file ./config.json
-
-# Using namespace title instead of ID
-cache-kv-purger kv values put --account-id 01a7362d577a6c3019a474fd6f485823 --title "My Application Cache" --key mykey --value "My value data"
-
-# With expiration time (Unix timestamp)
-cache-kv-purger kv values put --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --key temporary-key --value "Temporary data" --expiration 1735689600
-
-# With expiration in seconds from now (TTL)
-cache-kv-purger kv values put --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --key temporary-key --value "Temporary data" --expiration-ttl 3600
-
-# With custom metadata (as JSON)
-cache-kv-purger kv values put --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --key product-123 --value '{"name":"Product 123"}' --metadata '{"cache-tag":"products", "version":"1.0"}'
-
-# With verbose output
-cache-kv-purger kv values put --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --key mykey --value "My value data" --verbose
-```
-
-### Delete Value
-
-Deletes a value for a key.
-
-```bash
-# Basic usage
-cache-kv-purger kv values delete --account-id 01a7362d577a6c3019a474fd6f485823 --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --key mykey
-
-# Using namespace title instead of ID
-cache-kv-purger kv values delete --account-id 01a7362d577a6c3019a474fd6f485823 --title "My Application Cache" --key mykey
-
-# Using default account ID from config
-cache-kv-purger kv values delete --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --key mykey
-
-# With verbose output
-cache-kv-purger kv values delete --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --key mykey --verbose
-```
-
-## Unified KV Commands
-
-The tool uses a consolidated verb-based KV command structure for a simpler, more intuitive interface. These commands follow a consistent pattern and support both namespace name and ID resolution. The legacy command structure is still available but marked as deprecated.
+The tool uses a verb-based KV command structure for a simpler, more intuitive interface. These commands follow a consistent pattern and support both namespace name and ID resolution.
 
 For detailed documentation, see the [KV Command Guide](KV_COMMAND_GUIDE.md).
 
@@ -760,8 +595,11 @@ cache-kv-purger kv list --namespace "My Namespace" --prefix "product-"
 # List keys with metadata
 cache-kv-purger kv list --namespace-id YOUR_NAMESPACE_ID --metadata
 
-# Search for keys containing a value
+# Deep search for keys with value anywhere in metadata (recursive search)
 cache-kv-purger kv list --namespace-id YOUR_NAMESPACE_ID --search "product-image"
+
+# Search for keys with specific metadata field
+cache-kv-purger kv list --namespace-id YOUR_NAMESPACE_ID --tag-field "status" --tag-value "archived"
 ```
 
 ### Get Command
@@ -814,8 +652,11 @@ cache-kv-purger kv delete --namespace "My Namespace" --namespace-itself
 # Delete keys with a prefix (dry run first)
 cache-kv-purger kv delete --namespace-id YOUR_NAMESPACE_ID --bulk --prefix "temp-" --dry-run
 
-# Delete keys matching a search pattern
+# Delete keys with deep recursive metadata search
 cache-kv-purger kv delete --namespace-id YOUR_NAMESPACE_ID --bulk --search "old-data" --force
+
+# Delete keys with specific metadata field/value
+cache-kv-purger kv delete --namespace-id YOUR_NAMESPACE_ID --bulk --tag-field "status" --tag-value "archived"
 ```
 
 ### Namespace Command
@@ -835,83 +676,34 @@ cache-kv-purger kv namespace rename --namespace "Old Name" --title "New Name"
 
 ## KV Utility Commands
 
-### Get Key With Metadata
+The verb-based command structure now contains all the functionality previously in utility commands:
 
-Gets a key's value along with its metadata.
-
-```bash
-# Basic usage
-cache-kv-purger kv get-with-metadata --account-id 01a7362d577a6c3019a474fd6f485823 --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --key mykey
-
-# Using namespace title instead of ID
-cache-kv-purger kv get-with-metadata --account-id 01a7362d577a6c3019a474fd6f485823 --title "My Application Cache" --key mykey
-
-# Using default account ID from config
-cache-kv-purger kv get-with-metadata --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --key mykey
-
-# With verbose output
-cache-kv-purger kv get-with-metadata --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --key mykey --verbose
-```
+- To get metadata: `kv get --key KEY --metadata`
+- To check if a key exists: `kv get --key KEY --check-exists`
+- To configure KV settings: `kv config`
 
 ### Search and Filter Keys
 
-Search for keys with advanced filtering capabilities.
+The search capabilities are now integrated into the list and delete commands:
 
 ```bash
-# Search for keys containing a value anywhere in metadata
-cache-kv-purger kv search --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --value "product-image" --metadata
+# Deep recursive search in metadata (equivalent to old search command)
+cache-kv-purger kv list --namespace-id YOUR_NAMESPACE_ID --search "product-image" --metadata
 
 # Search for keys with a specific tag field
-cache-kv-purger kv search --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --tag-field "tags" --tag-value "product-image" --metadata
+cache-kv-purger kv list --namespace-id YOUR_NAMESPACE_ID --tag-field "tags" --tag-value "product-image" --metadata
 
-# Search and purge keys (dry run first)
-cache-kv-purger kv search --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --value "product-image" --purge --dry-run
+# Search and delete keys (dry run first)
+cache-kv-purger kv delete --namespace-id YOUR_NAMESPACE_ID --bulk --search "product-image" --dry-run
 
-# Search and purge keys (actual deletion)
-cache-kv-purger kv search --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --value "product-image" --purge
+# Search and delete keys (actual deletion)
+cache-kv-purger kv delete --namespace-id YOUR_NAMESPACE_ID --bulk --search "product-image"
 
 # Output results as JSON
-cache-kv-purger kv search --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --value "product-image" --json
+cache-kv-purger kv list --namespace-id YOUR_NAMESPACE_ID --search "product-image" --json
 
-# Control concurrency and chunk size
-cache-kv-purger kv search --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --value "product-image" --concurrency 20 --chunk-size 200
-```
-
-### Check If Key Exists
-
-Checks if a key exists in a namespace without retrieving its value.
-
-```bash
-# Basic usage
-cache-kv-purger kv exists --account-id 01a7362d577a6c3019a474fd6f485823 --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --key mykey
-
-# Using namespace title instead of ID
-cache-kv-purger kv exists --account-id 01a7362d577a6c3019a474fd6f485823 --title "My Application Cache" --key mykey
-
-# Using default account ID from config
-cache-kv-purger kv exists --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --key mykey
-
-# With verbose output
-cache-kv-purger kv exists --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --key mykey --verbose
-
-# Using in scripts (returns non-zero exit code if key doesn't exist)
-if cache-kv-purger kv exists --namespace-id 95bc3e9324ac40fa8b71c4a3016c13c7 --key mykey; then
-  echo "Key exists"
-else
-  echo "Key does not exist"
-fi
-```
-
-### Configure KV Settings
-
-Sets default account ID for KV operations.
-
-```bash
-# Set default account ID
-cache-kv-purger kv config --account-id 01a7362d577a6c3019a474fd6f485823
-
-# Show current KV configuration
-cache-kv-purger kv config
+# Control concurrency and batch size
+cache-kv-purger kv list --namespace-id YOUR_NAMESPACE_ID --search "product-image" --concurrency 20 --batch-size 200
 ```
 
 ### Bulk Operations

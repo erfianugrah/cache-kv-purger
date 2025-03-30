@@ -89,6 +89,7 @@
      - Added namespace resolution by name or ID
      - Combined bulk and single operations in the same commands
      - Provided improved documentation in KV_COMMAND_GUIDE.md
+     - Removed deprecated legacy commands completely
    - Impact: More intuitive command structure, reduced command complexity, better discoverability
 
 5. **KV Code Refactoring** ✅ IMPLEMENTED
