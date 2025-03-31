@@ -31,6 +31,7 @@ func NewKVDeleteCommand() *CommandBuilder {
 		searchValue    string
 		tagField       string
 		tagValue       string
+		allKeys        bool
 		dryRun         bool
 		force          bool
 		batchSize      int
@@ -52,6 +53,9 @@ When used with --bulk, deletes multiple keys based on filters.
 
   # Delete all keys with a prefix (with dry run)
   cache-kv-purger kv delete --namespace-id YOUR_NAMESPACE_ID --bulk --prefix "temp-" --dry-run
+  
+  # Delete all keys in the namespace
+  cache-kv-purger kv delete --namespace-id YOUR_NAMESPACE_ID --bulk --all-keys
 
   # Delete keys by metadata (with confirmation)
   cache-kv-purger kv delete --namespace-id YOUR_NAMESPACE_ID --bulk --tag-field "status" --tag-value "archived"
@@ -84,6 +88,8 @@ When used with --bulk, deletes multiple keys based on filters.
 		"tag-field", "", "Delete keys with this metadata field", &opts.tagField,
 	).WithStringFlag(
 		"tag-value", "", "Delete keys with this metadata field/value", &opts.tagValue,
+	).WithBoolFlag(
+		"all-keys", false, "Delete all keys in the namespace", &opts.allKeys,
 	).WithBoolFlag(
 		"dry-run", false, "Show what would be deleted without deleting", &opts.dryRun,
 	).WithBoolFlag(
@@ -228,7 +234,7 @@ When used with --bulk, deletes multiple keys based on filters.
 			// Check if we have filtering criteria without explicit keys
 			// Note: An empty prefix means match all keys when explicitly provided
 			prefixSpecified := opts.prefix != "" || cmd.Flags().Changed("prefix")
-			hasFilteringCriteria := prefixSpecified || opts.pattern != "" || opts.tagField != "" || opts.tagValue != "" || opts.searchValue != ""
+			hasFilteringCriteria := prefixSpecified || opts.pattern != "" || opts.tagField != "" || opts.tagValue != "" || opts.searchValue != "" || opts.allKeys
 			
 			// Check for the enhanced "deep search" capability
 			if opts.searchValue != "" && opts.tagField == "" {
@@ -314,16 +320,24 @@ When used with --bulk, deletes multiple keys based on filters.
 			}
 
 			// Regular bulk delete with options
+			// prefixSpecified was already defined above, reuse it 
+				
+			// Get the verbose flag
+			verbose, _ := cmd.Flags().GetBool("verbose")
+			
 			bulkDeleteOptions := kv.BulkDeleteOptions{
-				BatchSize:   opts.batchSize,
-				Concurrency: opts.concurrency,
-				DryRun:      opts.dryRun,
-				Force:       opts.force,
-				Prefix:      opts.prefix,
-				Pattern:     opts.pattern,
-				TagField:    opts.tagField,
-				TagValue:    opts.tagValue,
-				SearchValue: opts.searchValue, // This is less powerful than the deep search above
+				BatchSize:         opts.batchSize,
+				Concurrency:       opts.concurrency,
+				DryRun:            opts.dryRun,
+				Force:             opts.force,
+				Verbose:           verbose,
+				Prefix:            opts.prefix,
+				PrefixSpecified:   prefixSpecified,
+				AllKeys:           opts.allKeys,
+				Pattern:           opts.pattern,
+				TagField:          opts.tagField,
+				TagValue:          opts.tagValue,
+				SearchValue:       opts.searchValue, // This is less powerful than the deep search above
 			}
 
 			// If we have filtering criteria but no explicit keys
