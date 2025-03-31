@@ -171,6 +171,9 @@ cache-kv-purger kv delete --namespace "My Namespace" --namespace-itself
 # Delete keys with a prefix (dry run first)
 cache-kv-purger kv delete --namespace-id YOUR_NAMESPACE_ID --bulk --prefix "temp-" --dry-run
 
+# Delete ALL keys in a namespace while keeping the namespace itself
+cache-kv-purger kv delete --namespace-id YOUR_NAMESPACE_ID --bulk --prefix "" --force
+
 # Delete keys with deep recursive metadata search
 cache-kv-purger kv delete --namespace-id YOUR_NAMESPACE_ID --bulk --search "old-data" --force
 

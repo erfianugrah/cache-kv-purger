@@ -381,7 +381,8 @@ func PurgePrefixes(client *api.Client, zoneID string, prefixes []string) (*Purge
 
 // PurgeTagsInBatches purges tags in batches of 30 or fewer to comply with Cloudflare API limits
 // The function takes a progressCallback that receives updates on completed/total batches
-func PurgeTagsInBatches(client *api.Client, zoneID string, tags []string, progressCallback func(completed, total, successful int)) ([]string, []error) {
+// This version uses concurrency for faster processing when handling many batches
+func PurgeTagsInBatches(client *api.Client, zoneID string, tags []string, progressCallback func(completed, total, successful int), concurrencyOverride int) ([]string, []error) {
 	if zoneID == "" {
 		return nil, []error{fmt.Errorf("zone ID is required")}
 	}
@@ -393,41 +394,109 @@ func PurgeTagsInBatches(client *api.Client, zoneID string, tags []string, progre
 	// Define batch size (Cloudflare API limit is 30 tags per request)
 	batchSize := 30
 
-	// Calculate number of batches
-	numBatches := (len(tags) + batchSize - 1) / batchSize
+	// Calculate number of batches (this will be reflected in the length of the batches slice)
 
-	// Initialize results
-	successful := make([]string, 0)
-	var errors []error
+	// Simple progress callback if none provided
+	if progressCallback == nil {
+		progressCallback = func(completed, total, successful int) {}
+	}
 
-	// Process each batch
+	// Create work items for all batches
+	type batchWork struct {
+		batchIndex int
+		batchItems []string
+	}
+
+	var batches []batchWork
 	for i := 0; i < len(tags); i += batchSize {
-		// Get the current batch
 		end := i + batchSize
 		if end > len(tags) {
 			end = len(tags)
 		}
-		currentBatch := tags[i:end]
 
-		// Log the batch if verbose is enabled
-		batchNum := i/batchSize + 1
+		batch := tags[i:end]
+		batches = append(batches, batchWork{
+			batchIndex: i / batchSize,
+			batchItems: batch,
+		})
+	}
 
-		// Purge this batch of tags
-		_, err := PurgeTags(client, zoneID, currentBatch)
+	// Create a result channel for completed batches
+	type batchResult struct {
+		batchIndex int
+		batchItems []string
+		err        error
+	}
 
-		// Call progress callback if provided
-		if progressCallback != nil {
-			progressCallback(batchNum, numBatches, len(successful))
+	resultChan := make(chan batchResult, len(batches))
+
+	// Set concurrency based on override or default
+	concurrency := 10 // Default concurrency
+	if concurrencyOverride > 0 {
+		concurrency = concurrencyOverride
+	}
+
+	// Cap concurrency to avoid overwhelming API
+	if concurrency > 20 {
+		concurrency = 20
+	}
+
+	// Use a semaphore to limit concurrent goroutines
+	sem := make(chan struct{}, concurrency)
+
+	// Process all batches
+	for _, batch := range batches {
+		// Acquire semaphore slot (or wait if at capacity)
+		sem <- struct{}{}
+
+		// Launch a goroutine to process this batch
+		go func(b batchWork) {
+			defer func() { <-sem }() // Release semaphore when done
+
+			// Purge this batch of tags
+			_, err := PurgeTags(client, zoneID, b.batchItems)
+
+			// Send result back through channel
+			if err != nil {
+				resultChan <- batchResult{
+					batchIndex: b.batchIndex,
+					batchItems: nil,
+					err:        fmt.Errorf("batch %d failed: %w", b.batchIndex+1, err),
+				}
+				return
+			}
+
+			resultChan <- batchResult{
+				batchIndex: b.batchIndex,
+				batchItems: b.batchItems,
+				err:        nil,
+			}
+		}(batch)
+	}
+
+	// Collect results
+	successful := make([]string, 0)
+	var errors []error
+
+	// Track progress for callback
+	completed := 0
+	
+	// Collect results from all batches
+	for i := 0; i < len(batches); i++ {
+		result := <-resultChan
+
+		// Save error or success
+		if result.err != nil {
+			errors = append(errors, result.err)
+		} else if result.batchItems != nil {
+			successful = append(successful, result.batchItems...)
 		}
 
-		// Handle error
-		if err != nil {
-			errors = append(errors, fmt.Errorf("batch %d failed: %w", batchNum, err))
-			continue
-		}
-
-		// Add successfully purged tags to the result
-		successful = append(successful, currentBatch...)
+		// Update progress
+		completed++
+		
+		// Call progress callback
+		progressCallback(completed, len(batches), len(successful))
 	}
 
 	return successful, errors
@@ -435,8 +504,10 @@ func PurgeTagsInBatches(client *api.Client, zoneID string, tags []string, progre
 
 // PurgeTagsAcrossZonesInBatches purges tags from multiple zones in batches
 // Useful for purging the same set of tags across multiple zones
+// This version uses concurrency for both zone-level and batch-level processing
 func PurgeTagsAcrossZonesInBatches(client *api.Client, zoneIDs []string, tags []string,
-	progressCallback func(zoneIndex, totalZones, batchesDone, totalBatches, successful int)) (map[string][]string, map[string][]error) {
+	progressCallback func(zoneIndex, totalZones, batchesDone, totalBatches, successful int),
+	batchConcurrency, zoneConcurrency int) (map[string][]string, map[string][]error) {
 
 	if len(zoneIDs) == 0 {
 		return nil, map[string][]error{"error": {fmt.Errorf("at least one zone ID is required")}}
@@ -446,41 +517,88 @@ func PurgeTagsAcrossZonesInBatches(client *api.Client, zoneIDs []string, tags []
 		return nil, map[string][]error{"error": {fmt.Errorf("at least one tag is required")}}
 	}
 
-	// Initialize results for each zone
+	// Simple progress reporting if none provided
+	if progressCallback == nil {
+		progressCallback = func(zoneIndex, totalZones, batchesDone, totalBatches, successfulCount int) {}
+	}
+
+	// Initialize results for each zone (don't need mutex as we're using a channel for results)
 	successfulByZone := make(map[string][]string)
 	errorsByZone := make(map[string][]error)
 
-	// Calculate total number of batches across all zones
+	// Default batch size
 	batchSize := 30
+
+	// Calculate total number of batches across all zones
 	batchesPerZone := (len(tags) + batchSize - 1) / batchSize
 	totalBatches := batchesPerZone * len(zoneIDs)
 
-	// Track overall progress
-	batchesDone := 0
+	// Create a result channel for completed zones (eliminates need for mutex)
+	type zoneResult struct {
+		zoneIndex  int
+		zoneID     string
+		successful []string
+		errors     []error
+	}
 
-	// Process each zone
-	for zoneIndex, zoneID := range zoneIDs {
-		// Create a zone-specific progress callback that updates the overall progress
-		zoneProgressCallback := func(batchCompleted, batchTotal, successfulCount int) {
-			// Update overall progress
-			batchesDone++
+	resultChan := make(chan zoneResult, len(zoneIDs))
 
-			// Call the parent progress callback if provided
-			if progressCallback != nil {
-				progressCallback(zoneIndex+1, len(zoneIDs), batchesDone, totalBatches, successfulCount)
+	// Set concurrency based on override or default
+	concurrency := 3 // Default maximum number of zones to process concurrently
+	if zoneConcurrency > 0 {
+		concurrency = zoneConcurrency
+	}
+
+	// Use a semaphore to limit concurrent zone processing
+	sem := make(chan struct{}, concurrency)
+
+	// Process all zones
+	for i, zoneID := range zoneIDs {
+		// Acquire semaphore slot
+		sem <- struct{}{}
+
+		// Launch a goroutine to process this zone
+		go func(idx int, zID string) {
+			defer func() { <-sem }() // Release semaphore when done
+
+			// Counter for batches completed in this zone
+			zoneProgress := 0
+
+			// Create a zone-specific progress callback
+			zoneProgressCallback := func(batchCompleted, batchTotal, successfulCount int) {
+				// Update zone progress
+				zoneProgress = batchCompleted
+
+				// Call the parent progress callback
+				progressCallback(idx+1, len(zoneIDs),
+					(idx*batchesPerZone)+zoneProgress, // overall batches done
+					totalBatches, successfulCount)
 			}
-		}
 
-		// Purge tags for this zone
-		successful, errors := PurgeTagsInBatches(client, zoneID, tags, zoneProgressCallback)
+			// Purge tags for this zone
+			successful, errors := PurgeTagsInBatches(client, zID, tags, zoneProgressCallback, batchConcurrency)
+
+			// Send result back through channel
+			resultChan <- zoneResult{
+				zoneIndex:  idx,
+				zoneID:     zID,
+				successful: successful,
+				errors:     errors,
+			}
+		}(i, zoneID)
+	}
+
+	// Collect results from all zones
+	for i := 0; i < len(zoneIDs); i++ {
+		result := <-resultChan
 
 		// Store results for this zone
-		if len(successful) > 0 {
-			successfulByZone[zoneID] = successful
+		if len(result.successful) > 0 {
+			successfulByZone[result.zoneID] = result.successful
 		}
 
-		if len(errors) > 0 {
-			errorsByZone[zoneID] = errors
+		if len(result.errors) > 0 {
+			errorsByZone[result.zoneID] = result.errors
 		}
 	}
 

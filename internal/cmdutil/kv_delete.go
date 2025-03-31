@@ -226,7 +226,9 @@ When used with --bulk, deletes multiple keys based on filters.
 			}
 
 			// Check if we have filtering criteria without explicit keys
-			hasFilteringCriteria := opts.prefix != "" || opts.pattern != "" || opts.tagField != "" || opts.tagValue != "" || opts.searchValue != ""
+			// Note: An empty prefix means match all keys when explicitly provided
+			prefixSpecified := opts.prefix != "" || cmd.Flags().Changed("prefix")
+			hasFilteringCriteria := prefixSpecified || opts.pattern != "" || opts.tagField != "" || opts.tagValue != "" || opts.searchValue != ""
 			
 			// Check for the enhanced "deep search" capability
 			if opts.searchValue != "" && opts.tagField == "" {

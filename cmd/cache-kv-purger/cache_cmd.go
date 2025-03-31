@@ -537,12 +537,26 @@ func createPurgeTagsCmd() *cobra.Command {
 				return nil
 			}
 
-			// For larger numbers, use batching
-			// Split tags into batches
+			// For larger numbers, use batching with concurrency
+			// Get concurrency settings for batch processing  
+			concurrency := purgeFlagsVars.cacheConcurrency
+			if concurrency <= 0 && cfg != nil {
+				concurrency = cfg.GetCacheConcurrency()
+			}
+
+			// Cap concurrency to reasonable limits
+			if concurrency <= 0 {
+				concurrency = 10 // Default
+			} else if concurrency > 20 {
+				concurrency = 20 // Max
+			}
+
+			// Split tags into batches (for preview in dry run mode)
 			batches := splitIntoBatches(allTags, batchSize)
 
 			if verbose {
-				fmt.Printf("Split %d tags into %d batches (max %d tags per batch)\n", len(allTags), len(batches), batchSize)
+				fmt.Printf("Preparing to purge %d tags in %d batches using %d concurrent workers\n", 
+					len(allTags), len(batches), concurrency)
 			}
 
 			// Dry run mode
@@ -559,31 +573,40 @@ func createPurgeTagsCmd() *cobra.Command {
 				return nil
 			}
 
-			// Process batches
-			successCount := 0
-			for i, batch := range batches {
+			// Create progress function
+			progressFn := func(completed, total, successful int) {
 				if verbose {
-					fmt.Printf("Processing batch %d/%d: %d tags\n", i+1, len(batches), len(batch))
-					for j, tag := range batch {
-						fmt.Printf("  %d. %s\n", j+1, tag)
-					}
+					fmt.Printf("Progress: processed %d/%d batches, %d tags purged\n", 
+						completed, total, successful)
 				} else {
-					fmt.Printf("Processing batch %d/%d: %d tags...\n", i+1, len(batches), len(batch))
+					fmt.Printf("Processing batch %d/%d: %d tags purged so far...  \r", 
+						completed, total, successful)
 				}
+			}
 
-				// Call the Cloudflare API
-				resp, err := cache.PurgeTags(client, resolvedZoneID, batch)
-				if err != nil {
-					fmt.Printf("Error purging batch %d: %s\n", i+1, err)
-					continue
+			// Process tags with concurrent batching
+			successful, errors := cache.PurgeTagsInBatches(client, resolvedZoneID, allTags, progressFn, concurrency)
+
+			// Print a newline to clear the progress line
+			if !verbose {
+				fmt.Println()
+			}
+
+			// Report errors if any
+			if len(errors) > 0 {
+				fmt.Printf("Encountered %d errors during purging:\n", len(errors))
+				for i, err := range errors {
+					if i < 5 { // Show at most 5 errors to avoid flooding the console
+						fmt.Printf("  - %s\n", err)
+					} else {
+						fmt.Printf("  - ... and %d more errors\n", len(errors)-5)
+						break
+					}
 				}
-
-				fmt.Printf("Successfully purged batch %d. Purge ID: %s\n", i+1, resp.Result.ID)
-				successCount++
 			}
 
 			// Final summary
-			fmt.Printf("Completed: Successfully purged %d/%d batches of tags (%d tags total)\n", successCount, len(batches), len(allTags))
+			fmt.Printf("Completed: Successfully purged %d tags\n", len(successful))
 			return nil
 		},
 	}
