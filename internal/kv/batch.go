@@ -203,6 +203,7 @@ func WriteMultipleValuesConcurrently(client *api.Client, accountID, namespaceID 
 }
 
 // DeleteMultipleValuesInBatches deletes multiple values from a KV namespace in batches
+// This is the sequential version that processes batches one at a time
 func DeleteMultipleValuesInBatches(client *api.Client, accountID, namespaceID string, keys []string, batchSize int, progressCallback func(completed, total int)) error {
 	if len(keys) == 0 {
 		return nil
@@ -236,4 +237,120 @@ func DeleteMultipleValuesInBatches(client *api.Client, accountID, namespaceID st
 	}
 
 	return nil
+}
+
+// DeleteMultipleValuesConcurrently deletes multiple values from a KV namespace using concurrent batch operations
+// This is optimized for high throughput with a high API rate limit
+func DeleteMultipleValuesConcurrently(client *api.Client, accountID, namespaceID string, keys []string, batchSize int, concurrency int, progressCallback func(completed, total int)) (int, []error) {
+	if len(keys) == 0 {
+		return 0, nil
+	}
+
+	if batchSize <= 0 {
+		batchSize = 1000 // Default batch size
+	}
+
+	// Set reasonable concurrency
+	if concurrency <= 0 {
+		concurrency = 10 // Default concurrency
+	}
+	if concurrency > 50 {
+		concurrency = 50 // Cap concurrency to avoid overwhelming API
+	}
+
+	// Simple progress reporting if none provided
+	if progressCallback == nil {
+		progressCallback = func(completed, total int) {}
+	}
+
+	totalItems := len(keys)
+
+	// Create work items for all batches
+	type batchWork struct {
+		batchIndex int
+		batchItems []string
+	}
+
+	var batches []batchWork
+	for i := 0; i < totalItems; i += batchSize {
+		end := i + batchSize
+		if end > totalItems {
+			end = totalItems
+		}
+
+		batch := keys[i:end]
+		batches = append(batches, batchWork{
+			batchIndex: i / batchSize,
+			batchItems: batch,
+		})
+	}
+
+	// Create a result channel for completed batches
+	type batchResult struct {
+		batchIndex int
+		success    bool
+		err        error
+	}
+
+	resultChan := make(chan batchResult, len(batches))
+
+	// Use a semaphore to limit concurrent goroutines
+	sem := make(chan struct{}, concurrency)
+
+	// Process all batches
+	for _, batch := range batches {
+		// Acquire semaphore slot (or wait if at capacity)
+		sem <- struct{}{}
+
+		// Launch a goroutine to process this batch
+		go func(b batchWork) {
+			defer func() { <-sem }() // Release semaphore when done
+
+			// Delete this batch
+			err := DeleteMultipleValues(client, accountID, namespaceID, b.batchItems)
+
+			// Send result back through channel
+			if err != nil {
+				resultChan <- batchResult{
+					batchIndex: b.batchIndex,
+					success:    false,
+					err:        fmt.Errorf("batch %d failed: %w", b.batchIndex+1, err),
+				}
+				return
+			}
+
+			resultChan <- batchResult{
+				batchIndex: b.batchIndex,
+				success:    true,
+				err:        nil,
+			}
+		}(batch)
+	}
+
+	// Collect results
+	successCount := 0
+	var errors []error
+
+	// Track progress for callback
+	completed := 0
+
+	// Collect results from all batches
+	for i := 0; i < len(batches); i++ {
+		result := <-resultChan
+
+		// Track successful batches
+		if result.success {
+			successCount += len(batches[result.batchIndex].batchItems)
+		} else if result.err != nil {
+			errors = append(errors, result.err)
+		}
+
+		// Update progress
+		completed++
+		
+		// Call progress callback
+		progressCallback(completed, len(batches))
+	}
+
+	return successCount, errors
 }

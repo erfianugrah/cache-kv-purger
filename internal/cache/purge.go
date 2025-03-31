@@ -371,12 +371,256 @@ func PurgeHosts(client *api.Client, zoneID string, hosts []string) (*PurgeRespon
 	return PurgeCache(client, zoneID, options)
 }
 
+// PurgeHostsInBatches purges hosts in batches with concurrency support
+// This is optimized for purging a large number of hosts
+func PurgeHostsInBatches(client *api.Client, zoneID string, hosts []string, 
+	progressCallback func(completed, total, successful int), concurrencyOverride int) ([]string, []error) {
+	
+	if zoneID == "" {
+		return nil, []error{fmt.Errorf("zone ID is required")}
+	}
+
+	if len(hosts) == 0 {
+		return nil, []error{fmt.Errorf("at least one host is required")}
+	}
+
+	// Define batch size (typical API limit)
+	batchSize := 30
+
+	// Simple progress callback if none provided
+	if progressCallback == nil {
+		progressCallback = func(completed, total, successful int) {}
+	}
+
+	// Create work items for all batches
+	type batchWork struct {
+		batchIndex int
+		batchItems []string
+	}
+
+	var batches []batchWork
+	for i := 0; i < len(hosts); i += batchSize {
+		end := i + batchSize
+		if end > len(hosts) {
+			end = len(hosts)
+		}
+
+		batch := hosts[i:end]
+		batches = append(batches, batchWork{
+			batchIndex: i / batchSize,
+			batchItems: batch,
+		})
+	}
+
+	// Create a result channel for completed batches
+	type batchResult struct {
+		batchIndex int
+		batchItems []string
+		err        error
+	}
+
+	resultChan := make(chan batchResult, len(batches))
+
+	// Set concurrency based on override or default
+	concurrency := 10 // Default concurrency
+	if concurrencyOverride > 0 {
+		concurrency = concurrencyOverride
+	}
+
+	// Cap concurrency to avoid overwhelming API
+	if concurrency > 20 {
+		concurrency = 20
+	}
+
+	// Use a semaphore to limit concurrent goroutines
+	sem := make(chan struct{}, concurrency)
+
+	// Process all batches
+	for _, batch := range batches {
+		// Acquire semaphore slot (or wait if at capacity)
+		sem <- struct{}{}
+
+		// Launch a goroutine to process this batch
+		go func(b batchWork) {
+			defer func() { <-sem }() // Release semaphore when done
+
+			// Purge this batch of hosts
+			_, err := PurgeHosts(client, zoneID, b.batchItems)
+
+			// Send result back through channel
+			if err != nil {
+				resultChan <- batchResult{
+					batchIndex: b.batchIndex,
+					batchItems: nil,
+					err:        fmt.Errorf("batch %d failed: %w", b.batchIndex+1, err),
+				}
+				return
+			}
+
+			resultChan <- batchResult{
+				batchIndex: b.batchIndex,
+				batchItems: b.batchItems,
+				err:        nil,
+			}
+		}(batch)
+	}
+
+	// Collect results
+	successful := make([]string, 0)
+	var errors []error
+
+	// Track progress for callback
+	completed := 0
+	
+	// Collect results from all batches
+	for i := 0; i < len(batches); i++ {
+		result := <-resultChan
+
+		// Save error or success
+		if result.err != nil {
+			errors = append(errors, result.err)
+		} else if result.batchItems != nil {
+			successful = append(successful, result.batchItems...)
+		}
+
+		// Update progress
+		completed++
+		
+		// Call progress callback
+		progressCallback(completed, len(batches), len(successful))
+	}
+
+	return successful, errors
+}
+
 // PurgePrefixes purges files with specific URI prefixes from a zone
 func PurgePrefixes(client *api.Client, zoneID string, prefixes []string) (*PurgeResponse, error) {
 	options := PurgeOptions{
 		Prefixes: prefixes,
 	}
 	return PurgeCache(client, zoneID, options)
+}
+
+// PurgePrefixesInBatches purges prefixes in batches with concurrency support
+// This is optimized for purging a large number of prefixes
+func PurgePrefixesInBatches(client *api.Client, zoneID string, prefixes []string, 
+	progressCallback func(completed, total, successful int), concurrencyOverride int) ([]string, []error) {
+	
+	if zoneID == "" {
+		return nil, []error{fmt.Errorf("zone ID is required")}
+	}
+
+	if len(prefixes) == 0 {
+		return nil, []error{fmt.Errorf("at least one prefix is required")}
+	}
+
+	// Define batch size (typical API limit)
+	batchSize := 30
+
+	// Simple progress callback if none provided
+	if progressCallback == nil {
+		progressCallback = func(completed, total, successful int) {}
+	}
+
+	// Create work items for all batches
+	type batchWork struct {
+		batchIndex int
+		batchItems []string
+	}
+
+	var batches []batchWork
+	for i := 0; i < len(prefixes); i += batchSize {
+		end := i + batchSize
+		if end > len(prefixes) {
+			end = len(prefixes)
+		}
+
+		batch := prefixes[i:end]
+		batches = append(batches, batchWork{
+			batchIndex: i / batchSize,
+			batchItems: batch,
+		})
+	}
+
+	// Create a result channel for completed batches
+	type batchResult struct {
+		batchIndex int
+		batchItems []string
+		err        error
+	}
+
+	resultChan := make(chan batchResult, len(batches))
+
+	// Set concurrency based on override or default
+	concurrency := 10 // Default concurrency
+	if concurrencyOverride > 0 {
+		concurrency = concurrencyOverride
+	}
+
+	// Cap concurrency to avoid overwhelming API
+	if concurrency > 20 {
+		concurrency = 20
+	}
+
+	// Use a semaphore to limit concurrent goroutines
+	sem := make(chan struct{}, concurrency)
+
+	// Process all batches
+	for _, batch := range batches {
+		// Acquire semaphore slot (or wait if at capacity)
+		sem <- struct{}{}
+
+		// Launch a goroutine to process this batch
+		go func(b batchWork) {
+			defer func() { <-sem }() // Release semaphore when done
+
+			// Purge this batch of prefixes
+			_, err := PurgePrefixes(client, zoneID, b.batchItems)
+
+			// Send result back through channel
+			if err != nil {
+				resultChan <- batchResult{
+					batchIndex: b.batchIndex,
+					batchItems: nil,
+					err:        fmt.Errorf("batch %d failed: %w", b.batchIndex+1, err),
+				}
+				return
+			}
+
+			resultChan <- batchResult{
+				batchIndex: b.batchIndex,
+				batchItems: b.batchItems,
+				err:        nil,
+			}
+		}(batch)
+	}
+
+	// Collect results
+	successful := make([]string, 0)
+	var errors []error
+
+	// Track progress for callback
+	completed := 0
+	
+	// Collect results from all batches
+	for i := 0; i < len(batches); i++ {
+		result := <-resultChan
+
+		// Save error or success
+		if result.err != nil {
+			errors = append(errors, result.err)
+		} else if result.batchItems != nil {
+			successful = append(successful, result.batchItems...)
+		}
+
+		// Update progress
+		completed++
+		
+		// Call progress callback
+		progressCallback(completed, len(batches), len(successful))
+	}
+
+	return successful, errors
 }
 
 // PurgeTagsInBatches purges tags in batches of 30 or fewer to comply with Cloudflare API limits
