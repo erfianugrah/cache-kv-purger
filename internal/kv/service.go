@@ -323,12 +323,23 @@ func (s *CloudflareKVService) BulkDelete(ctx context.Context, accountID, namespa
 	}
 	
 	// Delete the collected keys
-	err := DeleteMultipleValuesInBatches(s.client, accountID, namespaceID, keysToDelete, options.BatchSize, progressCallback)
-	if err != nil {
-		return 0, err
+	if options.Concurrency > 0 {
+		// Use concurrent deletion for better performance
+		debug("Using concurrent deletion with %d workers", options.Concurrency)
+		successCount, errs := DeleteMultipleValuesConcurrently(s.client, accountID, namespaceID, keysToDelete, options.BatchSize, options.Concurrency, progressCallback)
+		if len(errs) > 0 {
+			return successCount, errs[0] // Return the first error encountered
+		}
+		return successCount, nil
+	} else {
+		// Fall back to sequential deletion
+		debug("Using sequential deletion")
+		err := DeleteMultipleValuesInBatches(s.client, accountID, namespaceID, keysToDelete, options.BatchSize, progressCallback)
+		if err != nil {
+			return 0, err
+		}
+		return len(keysToDelete), nil
 	}
-	
-	return len(keysToDelete), nil
 }
 
 // bulkDeleteWithAdvancedFiltering handles complex delete operations with filtering

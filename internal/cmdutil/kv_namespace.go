@@ -65,9 +65,13 @@ Create a KV namespace with the specified title.
 				return common.OutputJSON(ns)
 			}
 
-			fmt.Printf("Successfully created namespace:\n")
-			fmt.Printf("ID: %s\n", ns.ID)
-			fmt.Printf("Title: %s\n", ns.Title)
+			// Format using key-value table
+			data := make(map[string]string)
+			data["ID"] = ns.ID
+			data["Title"] = ns.Title
+			
+			fmt.Println("Successfully created namespace:")
+			common.FormatKeyValueTable(data)
 			return nil
 		}),
 	)
@@ -142,9 +146,13 @@ Rename a KV namespace to the specified title.
 				return common.OutputJSON(ns)
 			}
 
-			fmt.Printf("Successfully renamed namespace:\n")
-			fmt.Printf("ID: %s\n", ns.ID)
-			fmt.Printf("New Title: %s\n", ns.Title)
+			// Format using key-value table
+			data := make(map[string]string)
+			data["ID"] = ns.ID
+			data["Title"] = ns.Title
+			
+			fmt.Println("Successfully renamed namespace:")
+			common.FormatKeyValueTable(data)
 			return nil
 		}),
 	)

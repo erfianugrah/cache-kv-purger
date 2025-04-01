@@ -3,6 +3,7 @@ package main
 import (
 	"cache-kv-purger/internal/api"
 	"cache-kv-purger/internal/cache"
+	"cache-kv-purger/internal/common"
 	"cache-kv-purger/internal/config"
 	"cache-kv-purger/internal/zones"
 	"fmt"
@@ -157,7 +158,15 @@ func createPurgePrefixesCmd() *cobra.Command {
 					return fmt.Errorf("failed to purge prefixes: %w", err)
 				}
 
-				fmt.Printf("Successfully purged content with %d prefixes. Purge ID: %s\n", len(allPrefixes), resp.Result.ID)
+					// Format success with key-value table
+					data := make(map[string]string)
+					data["Operation"] = "Purge Prefixes"
+					data["Zone"] = resolvedZoneID
+					data["Prefixes Purged"] = fmt.Sprintf("%d", len(allPrefixes))
+					data["Purge ID"] = resp.Result.ID
+					data["Status"] = "Success"
+					
+					common.FormatKeyValueTable(data)
 				return nil
 			}
 

@@ -50,37 +50,34 @@ This powerful command combines the KV search capabilities with cache purging to:
 		dryRun, _ := cmd.Flags().GetBool("dry-run")
 		batchSize, _ := cmd.Flags().GetInt("batch-size")
 		concurrency, _ := cmd.Flags().GetInt("concurrency")
-		verbose, _ := cmd.Flags().GetBool("verbose")
-
-		// Validate required flags
-		if (namespaceID == "" && namespace == "") || (searchValue == "" && tagField == "") {
-			return fmt.Errorf("missing required flags: need --namespace-id or --namespace, and either --search or --tag-field")
+		
+		// Validate inputs
+		if (searchValue == "" && tagField == "") || (namespaceID == "" && namespace == "") {
+			return fmt.Errorf("either search or tag-field, and either namespace-id or namespace are required")
+		}
+		
+		if len(cacheTags) == 0 {
+			return fmt.Errorf("at least one cache-tag is required")
 		}
 
-		if zone == "" || len(cacheTags) == 0 {
-			return fmt.Errorf("missing required flags: need --zone and at least one --cache-tag")
-		}
-
-		// Load config for resolving account ID etc.
-		cfg, err := config.LoadFromFile("")
-		if err == nil && accountID == "" {
+		// Load config and fallback values
+		cfg, _ := config.LoadFromFile("")
+		
+		// Load account ID if not provided
+		if accountID == "" && cfg != nil {
 			accountID = cfg.GetAccountID()
 		}
-
-		if accountID == "" {
-			return fmt.Errorf("account ID is required via --account-id flag, environment variable, or config file")
-		}
-
+		
 		// Create API client
 		client, err := api.NewClient()
 		if err != nil {
 			return fmt.Errorf("failed to create API client: %w", err)
 		}
-
+		
 		// Create KV service
 		kvService := kv.NewKVService(client)
-
-		// Resolve namespace ID if name provided
+		
+		// Resolve namespace if name is provided
 		if namespace != "" && namespaceID == "" {
 			nsID, err := kvService.ResolveNamespaceID(cmd.Context(), accountID, namespace)
 			if err != nil {
@@ -88,55 +85,73 @@ This powerful command combines the KV search capabilities with cache purging to:
 			}
 			namespaceID = nsID
 		}
-
-		// First, find matching KV keys
-		fmt.Println("Step 1: Finding matching KV keys...")
-
+		
+		fmt.Println("Step 1: Searching for matching KV keys...")
+		
+		// Search for keys
 		searchOptions := kv.SearchOptions{
-			SearchValue:     searchValue,
-			TagField:        tagField,
-			TagValue:        tagValue,
-			IncludeMetadata: true,
-			BatchSize:       batchSize,
-			Concurrency:     concurrency,
+			SearchValue: searchValue,
+			TagField:    tagField,
+			TagValue:    tagValue,
+			BatchSize:   batchSize,
+			Concurrency: concurrency,
 		}
-
+		
 		matchingKeys, err := kvService.Search(cmd.Context(), accountID, namespaceID, searchOptions)
 		if err != nil {
-			return fmt.Errorf("KV search failed: %w", err)
+			return fmt.Errorf("search failed: %w", err)
 		}
-
-		// Extract just the key names for deletion
+		
+		// Extract key names
 		keyNames := make([]string, len(matchingKeys))
 		for i, key := range matchingKeys {
 			keyNames[i] = key.Key
 		}
-
-		// Report on keys found
+		
 		fmt.Printf("Found %d matching KV keys\n", len(keyNames))
+		
+		// If verbose and keys found, show a sample
+		verbose, _ := cmd.Flags().GetBool("verbose")
 		if verbose && len(keyNames) > 0 {
-			sampleSize := 5
-			if len(keyNames) < sampleSize {
-				sampleSize = len(keyNames)
+			maxDisplay := 5
+			if len(keyNames) < maxDisplay {
+				maxDisplay = len(keyNames)
 			}
-			fmt.Println("Sample keys:")
-			for i := 0; i < sampleSize; i++ {
-				fmt.Printf("  - %s\n", keyNames[i])
+			
+			fmt.Println("Sample matching keys:")
+			for i := 0; i < maxDisplay; i++ {
+				fmt.Printf("  %s\n", keyNames[i])
 			}
-			if len(keyNames) > sampleSize {
-				fmt.Printf("  - ... and %d more\n", len(keyNames)-sampleSize)
+			
+			if len(keyNames) > maxDisplay {
+				fmt.Printf("  ...and %d more\n", len(keyNames) - maxDisplay)
 			}
 		}
-
-		// If no keys found, skip KV deletion but still purge cache
-		kvDeleteNeeded := len(keyNames) > 0
-
-		// Step 2: Delete matching KV keys (if any found and not dry run)
-		if kvDeleteNeeded {
-			fmt.Println("\nStep 2: Deleting matching KV keys...")
+		
+		// Step 2: Delete the keys
+		fmt.Println("\nStep 2: Deleting matching KV keys...")
+		
+		if len(keyNames) > 0 {
 			if dryRun {
 				fmt.Printf("DRY RUN: Would delete %d KV keys\n", len(keyNames))
 			} else {
+				// Perform the deletion
+				if verbose {
+					// Calculate values for display
+					displayBatchSize := 1000
+					if batchSize > 0 {
+						displayBatchSize = batchSize
+					}
+					
+					displayConcurrency := 10
+					if concurrency > 0 {
+						displayConcurrency = concurrency
+					}
+					
+					fmt.Printf("Deleting %d keys with batch size %d and concurrency %d\n", 
+						len(keyNames), displayBatchSize, displayConcurrency)
+				}
+				
 				deleteOptions := kv.BulkDeleteOptions{
 					BatchSize:   batchSize,
 					Concurrency: concurrency,
@@ -148,7 +163,14 @@ This powerful command combines the KV search capabilities with cache purging to:
 				if err != nil {
 					return fmt.Errorf("KV deletion failed: %w", err)
 				}
-				fmt.Printf("Successfully deleted %d/%d KV keys\n", count, len(keyNames))
+				
+				// Format KV deletion results with key-value table
+				kvData := make(map[string]string)
+				kvData["Operation"] = "KV Deletion"
+				kvData["Keys Deleted"] = fmt.Sprintf("%d/%d", count, len(keyNames))
+				kvData["Status"] = "Success"
+				
+				common.FormatKeyValueTable(kvData)
 			}
 		} else {
 			fmt.Println("\nStep 2: No KV keys to delete, skipping deletion step")
@@ -166,14 +188,35 @@ This powerful command combines the KV search capabilities with cache purging to:
 			}
 
 			// Purge cache tags
-			_, err = cache.PurgeTags(client, zoneID, cacheTags)
+			resp, err := cache.PurgeTags(client, zoneID, cacheTags)
 			if err != nil {
 				return fmt.Errorf("cache purge failed: %w", err)
 			}
-			fmt.Printf("Successfully purged %d cache tags: %s\n", len(cacheTags), strings.Join(cacheTags, ", "))
+			
+			// Format cache purge results with key-value table
+			cacheData := make(map[string]string)
+			cacheData["Operation"] = "Cache Tag Purge"
+			cacheData["Zone"] = zone
+			cacheData["Tags Purged"] = strings.Join(cacheTags, ", ")
+			cacheData["Purge ID"] = resp.Result.ID
+			cacheData["Status"] = "Success"
+			
+			common.FormatKeyValueTable(cacheData)
 		}
 
-		fmt.Println("\nSync operation completed successfully!")
+		// Format final success message
+		resultData := make(map[string]string)
+		resultData["Operation"] = "Sync Purge"
+		if dryRun {
+			resultData["Status"] = "DRY RUN Completed"
+		} else {
+			resultData["Status"] = "Successfully Completed"
+		}
+		resultData["KV Keys Found"] = fmt.Sprintf("%d", len(keyNames))
+		resultData["Cache Tags"] = fmt.Sprintf("%d", len(cacheTags))
+		
+		fmt.Println()
+		common.FormatKeyValueTable(resultData)
 		return nil
 	},
 }
@@ -187,16 +230,12 @@ func init() {
 
 	// Add flags to purge command
 	syncPurgeCmd.Flags().String("account-id", "", "Cloudflare Account ID")
-	syncPurgeCmd.Flags().String("namespace-id", "", "Namespace ID to search in")
-	syncPurgeCmd.Flags().String("namespace", "", "Namespace name (alternative to namespace-id)")
-	
-	// Search options
-	syncPurgeCmd.Flags().String("search", "", "Search for keys containing this value (deep recursive metadata search)")
-	syncPurgeCmd.Flags().String("tag-field", "", "Metadata field to filter by")
+	syncPurgeCmd.Flags().String("namespace-id", "", "KV Namespace ID")
+	syncPurgeCmd.Flags().String("namespace", "", "KV Namespace name (alternative to namespace-id)")
+	syncPurgeCmd.Flags().String("search", "", "Search for keys containing this value")
+	syncPurgeCmd.Flags().String("tag-field", "", "Search for keys with this metadata field")
 	syncPurgeCmd.Flags().String("tag-value", "", "Value to match in the tag field")
-	
-	// Cache options
-	syncPurgeCmd.Flags().String("zone", "", "Zone ID or domain to purge cache from")
+	syncPurgeCmd.Flags().String("zone", "", "Zone ID or name to purge content from")
 	syncPurgeCmd.Flags().StringSlice("cache-tag", []string{}, "Cache tags to purge (can specify multiple times)")
 	
 	// Operation options

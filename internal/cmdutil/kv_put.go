@@ -154,7 +154,17 @@ When used with --bulk and --bulk-file, puts multiple key values from a file.
 					return fmt.Errorf("failed to put value: %w", err)
 				}
 
-				fmt.Printf("Successfully put value for key '%s'\n", opts.key)
+				// Format success message with key-value table
+				data := make(map[string]string)
+				data["Key"] = opts.key
+				data["Status"] = "Successfully stored"
+				if opts.expiration > 0 {
+					data["Expiration"] = fmt.Sprintf("%d", opts.expiration)
+				} else if opts.expirationTTL > 0 {
+					data["Expiration TTL"] = fmt.Sprintf("%d seconds", opts.expirationTTL)
+				}
+				
+				common.FormatKeyValueTable(data)
 				return nil
 			}
 
@@ -183,7 +193,19 @@ When used with --bulk and --bulk-file, puts multiple key values from a file.
 				return fmt.Errorf("bulk put operation failed: %w", err)
 			}
 
-			fmt.Printf("Successfully put %d/%d values\n", count, len(bulkItems))
+			// Format bulk operation result
+			data := make(map[string]string)
+			data["Operation"] = "Bulk Store"
+			data["Success Count"] = fmt.Sprintf("%d", count)
+			data["Total Items"] = fmt.Sprintf("%d", len(bulkItems))
+			if opts.concurrency > 0 {
+				data["Concurrency"] = fmt.Sprintf("%d workers", opts.concurrency)
+			}
+			if opts.batchSize > 0 {
+				data["Batch Size"] = fmt.Sprintf("%d items", opts.batchSize)
+			}
+			
+			common.FormatKeyValueTable(data)
 			return nil
 		}),
 	)

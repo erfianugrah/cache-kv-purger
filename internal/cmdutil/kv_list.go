@@ -124,12 +124,13 @@ When used with --namespace-id or --namespace, lists keys in the specified namesp
 				}
 
 				// Table format
-				fmt.Println("Namespaces:")
-				fmt.Println("ID\tTitle")
-				fmt.Println("-------------------------------------------------")
-				for _, ns := range namespaces {
-					fmt.Printf("%s\t%s\n", ns.ID, ns.Title)
+				headers := []string{"ID", "Title"}
+				rows := make([][]string, len(namespaces))
+				for i, ns := range namespaces {
+					rows[i] = []string{ns.ID, ns.Title}
 				}
+				fmt.Println("Namespaces:")
+				common.FormatTable(headers, rows)
 				return nil
 			}
 
@@ -147,21 +148,36 @@ When used with --namespace-id or --namespace, lists keys in the specified namesp
 					return common.OutputJSON(key)
 				}
 
-				// Simple format
-				fmt.Printf("Key: %s\n", key.Key)
+				// Simple format using key-value table
+				data := make(map[string]string)
+				data["Key"] = key.Key
 				if key.Expiration > 0 {
-					fmt.Printf("Expiration: %d\n", key.Expiration)
+					data["Expiration"] = fmt.Sprintf("%d", key.Expiration)
 				}
+				
+				// Show metadata if available
 				if key.Metadata != nil {
-					fmt.Println("Metadata:")
+					metaStr := ""
 					for k, v := range *key.Metadata {
-						fmt.Printf("  %s: %v\n", k, v)
+						if metaStr != "" {
+							metaStr += ", "
+						}
+						metaStr += fmt.Sprintf("%s: %v", k, v)
 					}
+					data["Metadata"] = metaStr
 				}
+				
+				// Show value if requested
 				if opts.values {
-					fmt.Println("Value:")
-					fmt.Println(key.Value)
+					// Truncate long values for display
+					valueDisplay := key.Value
+					if len(valueDisplay) > 100 {
+						valueDisplay = valueDisplay[:97] + "..."
+					}
+					data["Value"] = valueDisplay
 				}
+				
+				common.FormatKeyValueTable(data)
 				return nil
 			}
 
@@ -222,11 +238,15 @@ When used with --namespace-id or --namespace, lists keys in the specified namesp
 					return nil
 				}
 				
-				// If metadata is requested, show a more detailed table
+				// Prepare table data
+				var headers []string
+				var rows [][]string
+				
 				if opts.metadata {
-					fmt.Println("Key\tExpiration\tMetadata")
-					fmt.Println("-------------------------------------------------")
-					for _, key := range keys {
+					headers = []string{"Key", "Expiration", "Metadata"}
+					rows = make([][]string, len(keys))
+					
+					for i, key := range keys {
 						expStr := ""
 						if key.Expiration > 0 {
 							expStr = fmt.Sprintf("%d", key.Expiration)
@@ -237,19 +257,22 @@ When used with --namespace-id or --namespace, lists keys in the specified namesp
 							metaStr = fmt.Sprintf("%v", *key.Metadata)
 						}
 						
-						fmt.Printf("%s\t%s\t%s\n", key.Key, expStr, metaStr)
+						rows[i] = []string{key.Key, expStr, metaStr}
 					}
 				} else {
-					fmt.Println("Key\tExpiration")
-					fmt.Println("-------------------------------------------------")
-					for _, key := range keys {
+					headers = []string{"Key", "Expiration"}
+					rows = make([][]string, len(keys))
+					
+					for i, key := range keys {
 						expStr := ""
 						if key.Expiration > 0 {
 							expStr = fmt.Sprintf("%d", key.Expiration)
 						}
-						fmt.Printf("%s\t%s\n", key.Key, expStr)
+						rows[i] = []string{key.Key, expStr}
 					}
 				}
+				
+				common.FormatTable(headers, rows)
 				
 				// Include note about metadata
 				if !opts.metadata && len(keys) > 0 {
@@ -272,14 +295,46 @@ When used with --namespace-id or --namespace, lists keys in the specified namesp
 
 			// Table format
 			fmt.Printf("Keys in namespace (%d):\n", len(result.Keys))
-			fmt.Println("Key\tExpiration")
-			fmt.Println("-------------------------------------------------")
-			for _, key := range result.Keys {
-				expStr := ""
-				if key.Expiration > 0 {
-					expStr = fmt.Sprintf("%d", key.Expiration)
+			
+			// Prepare table data
+			var headers []string
+			var rows [][]string
+			
+			if opts.metadata {
+				headers = []string{"Key", "Expiration", "Metadata"}
+				rows = make([][]string, len(result.Keys))
+				
+				for i, key := range result.Keys {
+					expStr := ""
+					if key.Expiration > 0 {
+						expStr = fmt.Sprintf("%d", key.Expiration)
+					}
+					
+					metaStr := "<none>"
+					if key.Metadata != nil {
+						metaStr = fmt.Sprintf("%v", *key.Metadata)
+					}
+					
+					rows[i] = []string{key.Key, expStr, metaStr}
 				}
-				fmt.Printf("%s\t%s\n", key.Key, expStr)
+			} else {
+				headers = []string{"Key", "Expiration"}
+				rows = make([][]string, len(result.Keys))
+				
+				for i, key := range result.Keys {
+					expStr := ""
+					if key.Expiration > 0 {
+						expStr = fmt.Sprintf("%d", key.Expiration)
+					}
+					rows[i] = []string{key.Key, expStr}
+				}
+			}
+			
+			common.FormatTable(headers, rows)
+			
+			// Include note about metadata if appropriate
+			if !opts.metadata && len(result.Keys) > 0 {
+				fmt.Println("\nTip: Use --metadata to see metadata information")
 			}
 
 			if result.Cursor != "" {

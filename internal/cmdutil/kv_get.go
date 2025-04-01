@@ -139,8 +139,34 @@ When used with --bulk, gets multiple key values based on filters.
 					return os.WriteFile(opts.outputFile, []byte(key.Value), 0644)
 				}
 
-				// Otherwise, print value directly
-				fmt.Print(key.Value)
+				// Otherwise, use formatted output with the common formatter
+				data := make(map[string]string)
+				data["Key"] = key.Key
+				
+				if key.Expiration > 0 {
+					data["Expiration"] = fmt.Sprintf("%d", key.Expiration)
+				}
+				
+				// Add metadata if available
+				if key.Metadata != nil {
+					metaStr := ""
+					for k, v := range *key.Metadata {
+						if metaStr != "" {
+							metaStr += ", "
+						}
+						metaStr += fmt.Sprintf("%s: %v", k, v)
+					}
+					data["Metadata"] = metaStr
+				}
+				
+				// Add the value
+				if len(key.Value) > 200 {
+					data["Value"] = fmt.Sprintf("(length: %d chars)\n%s", len(key.Value), key.Value)
+				} else {
+					data["Value"] = key.Value
+				}
+				
+				common.FormatKeyValueTable(data)
 				return nil
 			}
 
@@ -235,23 +261,46 @@ When used with --bulk, gets multiple key values based on filters.
 				return os.WriteFile(opts.outputFile, []byte(output.String()), 0644)
 			}
 
-			// Simple table output
-			fmt.Printf("Retrieved %d keys:\n", len(result))
+			// Enhanced formatted output
+			fmt.Printf("Retrieved %d keys:\n\n", len(result))
+			
 			for i, kv := range result {
-				fmt.Printf("Key: %s\n", kv.Key)
+				// Create a formatted key-value map for this entry
+				data := make(map[string]string)
+				data["Key"] = kv.Key
+				
 				if kv.Expiration > 0 {
-					fmt.Printf("Expiration: %d\n", kv.Expiration)
+					data["Expiration"] = fmt.Sprintf("%d", kv.Expiration)
 				}
+				
+				// Format metadata nicely if available
 				if kv.Metadata != nil {
-					fmt.Println("Metadata:")
+					metaStr := ""
 					for k, v := range *kv.Metadata {
-						fmt.Printf("  %s: %v\n", k, v)
+						if metaStr != "" {
+							metaStr += ", "
+						}
+						metaStr += fmt.Sprintf("%s: %v", k, v)
 					}
+					data["Metadata"] = metaStr
 				}
-				fmt.Println("Value:")
-				fmt.Println(kv.Value)
+				
+				// Handle value (potentially truncate if very long)
+				valueDisplay := kv.Value
+				if len(valueDisplay) > 500 {
+					// For very long values, truncate with indication
+					valuePreview := valueDisplay[:250] + "\n...\n" + valueDisplay[len(valueDisplay)-250:]
+					data["Value"] = fmt.Sprintf("(length: %d chars)\n%s", len(valueDisplay), valuePreview)
+				} else {
+					data["Value"] = valueDisplay
+				}
+				
+				// Use the common formatter
+				common.FormatKeyValueTable(data)
+				
+				// Add separator between items if not the last one
 				if i < len(result)-1 {
-					fmt.Println("---")
+					fmt.Println()
 				}
 			}
 

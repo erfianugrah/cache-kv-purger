@@ -3,6 +3,7 @@ package cmdutil
 import (
 	"fmt"
 
+	"cache-kv-purger/internal/common"
 	"cache-kv-purger/internal/config"
 
 	"github.com/spf13/cobra"
@@ -41,8 +42,12 @@ When used with --show, displays the current configuration.
 
 			// If showing config, display it
 			if opts.show {
+				// Use key-value table for configuration display
+				data := make(map[string]string)
+				data["Default Account ID"] = cfg.AccountID
+				
 				fmt.Println("KV Configuration:")
-				fmt.Printf("Default Account ID: %s\n", cfg.AccountID)
+				common.FormatKeyValueTable(data)
 				return nil
 			}
 
@@ -52,7 +57,13 @@ When used with --show, displays the current configuration.
 				if err := cfg.SaveToFile(""); err != nil {
 					return fmt.Errorf("failed to save config: %w", err)
 				}
-				fmt.Printf("Default account ID set to: %s\n", opts.accountID)
+				
+				// Format the success message with key-value table
+				data := make(map[string]string)
+				data["Default Account ID"] = opts.accountID
+				data["Status"] = "Updated successfully"
+				
+				common.FormatKeyValueTable(data)
 				return nil
 			}
 
