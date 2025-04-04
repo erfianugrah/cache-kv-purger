@@ -35,8 +35,8 @@ func createPurgeTagsCmd() *cobra.Command {
   # Purge tags from a comma-delimited list
   cache-kv-purger cache purge tags --zone example.com --tags "tag1,tag2,tag3,tag4" 
 
-  # Purge tags with batch control (max 30 tags per API call)
-  cache-kv-purger cache purge tags --zone example.com --tags "tag1,tag2,tag3,tag4" --batch-size 2
+  # Purge tags with batch control (API limit: 100 tags per request)
+  cache-kv-purger cache purge tags --zone example.com --tags "tag1,tag2,tag3,tag4" --batch-size 50
 
   # Purge tags from a file (CSV, JSON, or text with one tag per line)
   cache-kv-purger cache purge tags --zone example.com --tags-file tags.csv 
@@ -49,7 +49,7 @@ func createPurgeTagsCmd() *cobra.Command {
 
 			// Create API client
 			client, err := api.NewClient()
-			if err != nil {
+			if err \!= nil {
 				return fmt.Errorf("failed to create API client: %w", err)
 			}
 
@@ -67,12 +67,12 @@ func createPurgeTagsCmd() *cobra.Command {
 			allTags = append(allTags, purgeFlagsVars.tags...)
 
 			// Add tags from comma-delimited string if provided
-			if commaDelimitedTags != "" {
+			if commaDelimitedTags \!= "" {
 				// Split by comma and process each tag
 				for _, tag := range strings.Split(commaDelimitedTags, ",") {
 					// Trim whitespace
 					tag = strings.TrimSpace(tag)
-					if tag != "" {
+					if tag \!= "" {
 						allTags = append(allTags, tag)
 					}
 				}
@@ -83,7 +83,7 @@ func createPurgeTagsCmd() *cobra.Command {
 			}
 
 			// Add tags from file if specified
-			if tagsFile != "" {
+			if tagsFile \!= "" {
 				// Determine file extension
 				fileExt := strings.ToLower(filepath.Ext(tagsFile))
 
@@ -91,21 +91,21 @@ func createPurgeTagsCmd() *cobra.Command {
 				case ".json":
 					// Read JSON file
 					data, err := os.ReadFile(tagsFile)
-					if err != nil {
+					if err \!= nil {
 						return fmt.Errorf("failed to read tags file: %w", err)
 					}
 
 					// Parse JSON data
 					var tags []string
 					err = json.Unmarshal(data, &tags)
-					if err != nil {
+					if err \!= nil {
 						return fmt.Errorf("failed to parse JSON tags file: %w", err)
 					}
 
 					// Add tags
 					for _, tag := range tags {
 						tag = strings.TrimSpace(tag)
-						if tag != "" {
+						if tag \!= "" {
 							allTags = append(allTags, tag)
 						}
 					}
@@ -117,7 +117,7 @@ func createPurgeTagsCmd() *cobra.Command {
 				case ".csv":
 					// Read CSV file
 					file, err := os.Open(tagsFile)
-					if err != nil {
+					if err \!= nil {
 						return fmt.Errorf("failed to open CSV file: %w", err)
 					}
 					defer file.Close()
@@ -125,7 +125,7 @@ func createPurgeTagsCmd() *cobra.Command {
 					// Create CSV reader
 					reader := csv.NewReader(file)
 					records, err := reader.ReadAll()
-					if err != nil {
+					if err \!= nil {
 						return fmt.Errorf("failed to parse CSV file: %w", err)
 					}
 
@@ -134,7 +134,7 @@ func createPurgeTagsCmd() *cobra.Command {
 					for _, record := range records {
 						for _, field := range record {
 							tag := strings.TrimSpace(field)
-							if tag != "" && !strings.HasPrefix(tag, "#") {
+							if tag \!= "" && \!strings.HasPrefix(tag, "#") {
 								allTags = append(allTags, tag)
 								tagCount++
 							}
@@ -148,7 +148,7 @@ func createPurgeTagsCmd() *cobra.Command {
 				default:
 					// Treat as text file (one tag per line)
 					data, err := os.ReadFile(tagsFile)
-					if err != nil {
+					if err \!= nil {
 						return fmt.Errorf("failed to read tags file: %w", err)
 					}
 
@@ -157,7 +157,7 @@ func createPurgeTagsCmd() *cobra.Command {
 					tagCount := 0
 					for _, line := range lines {
 						tag := strings.TrimSpace(line)
-						if tag != "" && !strings.HasPrefix(tag, "#") {
+						if tag \!= "" && \!strings.HasPrefix(tag, "#") {
 							allTags = append(allTags, tag)
 							tagCount++
 						}
@@ -190,7 +190,7 @@ func createPurgeTagsCmd() *cobra.Command {
 
 			if zoneID == "" {
 				// Try to get from config or environment variable
-				if cfg != nil {
+				if cfg \!= nil {
 					zoneID = cfg.GetZoneID()
 				}
 			}
@@ -201,13 +201,21 @@ func createPurgeTagsCmd() *cobra.Command {
 
 			// Resolve zone (could be name or ID)
 			resolvedZoneID, err := zones.ResolveZoneIdentifier(client, accountID, zoneID)
-			if err != nil {
+			if err \!= nil {
 				return fmt.Errorf("failed to resolve zone: %w", err)
 			}
 
 			// Default batch size if not specified or invalid
 			if batchSize <= 0 {
-				batchSize = 30 // Cloudflare's default limit is 30
+				batchSize = 100 // API has a limit of 100 items per purge request
+			}
+			
+			// Ensure batch size is at most 100 (API limit)
+			if batchSize > 100 {
+				if verbose {
+					fmt.Println("Warning: Reducing batch size to 100 (Cloudflare API limit)")
+				}
+				batchSize = 100
 			}
 
 			// If only a few tags, don't bother with batching
@@ -227,7 +235,7 @@ func createPurgeTagsCmd() *cobra.Command {
 				}
 
 				resp, err := cache.PurgeTags(client, resolvedZoneID, allTags)
-				if err != nil {
+				if err \!= nil {
 					return fmt.Errorf("failed to purge tags: %w", err)
 				}
 
@@ -238,15 +246,15 @@ func createPurgeTagsCmd() *cobra.Command {
 			// For larger numbers, use batching with concurrency
 			// Get concurrency settings for batch processing  
 			concurrency := purgeFlagsVars.cacheConcurrency
-			if concurrency <= 0 && cfg != nil {
+			if concurrency <= 0 && cfg \!= nil {
 				concurrency = cfg.GetCacheConcurrency()
 			}
 
-			// Cap concurrency to reasonable limits
+			// Cap concurrency for Enterprise tier
 			if concurrency <= 0 {
-				concurrency = 10 // Default
-			} else if concurrency > 20 {
-				concurrency = 20 // Max
+				concurrency = 50 // Default
+			} else if concurrency > 50 {
+				concurrency = 50 // Enterprise tier allows 50 requests per second
 			}
 
 			// Split tags into batches (for preview in dry run mode)
@@ -286,7 +294,7 @@ func createPurgeTagsCmd() *cobra.Command {
 			successful, errors := cache.PurgeTagsInBatches(client, resolvedZoneID, allTags, progressFn, concurrency)
 
 			// Print a newline to clear the progress line
-			if !verbose {
+			if \!verbose {
 				fmt.Println()
 			}
 
@@ -312,7 +320,7 @@ func createPurgeTagsCmd() *cobra.Command {
 	cmd.Flags().StringArrayVar(&purgeFlagsVars.tags, "tag", []string{}, "Cache tag to purge (can be specified multiple times)")
 	cmd.Flags().StringVar(&commaDelimitedTags, "tags", "", "Comma-delimited list of cache tags to purge (e.g., \"tag1,tag2,tag3\")")
 	cmd.Flags().StringVar(&tagsFile, "tags-file", "", "Path to a file containing cache tags to purge (CSV, JSON, or text with one tag per line)")
-	cmd.Flags().IntVar(&batchSize, "batch-size", 30, "Maximum number of tags to purge in each batch (default 30)")
+	cmd.Flags().IntVar(&batchSize, "batch-size", 100, "Maximum number of tags to purge in each batch (API limit: 100 tags per request)")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Show what would be purged without actually purging")
 
 	return cmd

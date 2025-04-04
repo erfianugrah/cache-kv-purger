@@ -124,7 +124,7 @@ func PurgeFilesWithHeaders(client *api.Client, zoneID string, files []FileWithHe
 }
 
 // PurgeFilesWithHeadersInBatches purges files with custom headers in batches to comply with Cloudflare API limits
-// The batch size is automatically determined based on response headers or defaults to 30
+// The batch size is set to 100 items per request (Cloudflare API limit)
 // The function takes a progressCallback that receives updates on completed/total batches
 func PurgeFilesWithHeadersInBatches(client *api.Client, zoneID string, files []FileWithHeaders,
 	progressCallback func(completed, total, successful int), concurrencyOverride int) ([]FileWithHeaders, []error) {
@@ -137,8 +137,8 @@ func PurgeFilesWithHeadersInBatches(client *api.Client, zoneID string, files []F
 		return nil, []error{fmt.Errorf("at least one file with headers is required")}
 	}
 
-	// Default batch size (Cloudflare's standard API limit)
-	batchSize := 30
+	// Default batch size based on API limits
+	batchSize := 100 // API has a limit of 100 items per purge request
 
 	// Calculate number of batches (used for log progress updates)
 	_ = (len(files) + batchSize - 1) / batchSize
@@ -183,9 +183,9 @@ func PurgeFilesWithHeadersInBatches(client *api.Client, zoneID string, files []F
 		concurrency = concurrencyOverride
 	}
 
-	// Cap concurrency to avoid overwhelming API
-	if concurrency > 20 {
-		concurrency = 20
+	// Cap concurrency based on account tier
+	if concurrency > 50 {
+		concurrency = 50 // Enterprise tier allows 50 requests per second
 	}
 
 	// Use a semaphore to limit concurrent goroutines
@@ -277,7 +277,7 @@ func PurgeFilesWithHeadersAcrossZonesInBatches(client *api.Client, zoneIDs []str
 	errorsByZone := make(map[string][]error)
 
 	// Default batch size
-	batchSize := 30
+	batchSize := 100 // API has a limit of 100 items per purge request
 
 	// Calculate total number of batches across all zones
 	batchesPerZone := (len(files) + batchSize - 1) / batchSize
@@ -384,8 +384,8 @@ func PurgeHostsInBatches(client *api.Client, zoneID string, hosts []string,
 		return nil, []error{fmt.Errorf("at least one host is required")}
 	}
 
-	// Define batch size (typical API limit)
-	batchSize := 30
+	// Define batch size based on API limits
+	batchSize := 100 // API has a limit of 100 items per purge request
 
 	// Simple progress callback if none provided
 	if progressCallback == nil {
@@ -427,9 +427,9 @@ func PurgeHostsInBatches(client *api.Client, zoneID string, hosts []string,
 		concurrency = concurrencyOverride
 	}
 
-	// Cap concurrency to avoid overwhelming API
-	if concurrency > 20 {
-		concurrency = 20
+	// Cap concurrency based on account tier
+	if concurrency > 50 {
+		concurrency = 50 // Enterprise tier allows 50 requests per second
 	}
 
 	// Use a semaphore to limit concurrent goroutines
@@ -514,8 +514,8 @@ func PurgePrefixesInBatches(client *api.Client, zoneID string, prefixes []string
 		return nil, []error{fmt.Errorf("at least one prefix is required")}
 	}
 
-	// Define batch size (typical API limit)
-	batchSize := 30
+	// Define batch size based on API limits
+	batchSize := 100 // API has a limit of 100 items per purge request
 
 	// Simple progress callback if none provided
 	if progressCallback == nil {
@@ -557,9 +557,9 @@ func PurgePrefixesInBatches(client *api.Client, zoneID string, prefixes []string
 		concurrency = concurrencyOverride
 	}
 
-	// Cap concurrency to avoid overwhelming API
-	if concurrency > 20 {
-		concurrency = 20
+	// Cap concurrency based on account tier
+	if concurrency > 50 {
+		concurrency = 50 // Enterprise tier allows 50 requests per second
 	}
 
 	// Use a semaphore to limit concurrent goroutines
@@ -635,8 +635,8 @@ func PurgeTagsInBatches(client *api.Client, zoneID string, tags []string, progre
 		return nil, []error{fmt.Errorf("at least one tag is required")}
 	}
 
-	// Define batch size (Cloudflare API limit is 30 tags per request)
-	batchSize := 30
+	// Define batch size based on API limits
+	batchSize := 100 // API has a limit of 100 items per purge request
 
 	// Calculate number of batches (this will be reflected in the length of the batches slice)
 
@@ -680,9 +680,9 @@ func PurgeTagsInBatches(client *api.Client, zoneID string, tags []string, progre
 		concurrency = concurrencyOverride
 	}
 
-	// Cap concurrency to avoid overwhelming API
-	if concurrency > 20 {
-		concurrency = 20
+	// Cap concurrency based on account tier
+	if concurrency > 50 {
+		concurrency = 50 // Enterprise tier allows 50 requests per second
 	}
 
 	// Use a semaphore to limit concurrent goroutines
@@ -771,7 +771,7 @@ func PurgeTagsAcrossZonesInBatches(client *api.Client, zoneIDs []string, tags []
 	errorsByZone := make(map[string][]error)
 
 	// Default batch size
-	batchSize := 30
+	batchSize := 100 // API has a limit of 100 items per purge request
 
 	// Calculate total number of batches across all zones
 	batchesPerZone := (len(tags) + batchSize - 1) / batchSize

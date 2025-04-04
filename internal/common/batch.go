@@ -26,8 +26,8 @@ type BatchProcessor struct {
 // NewBatchProcessor creates a new batch processor with default settings
 func NewBatchProcessor() *BatchProcessor {
 	return &BatchProcessor{
-		BatchSize:        100,
-		Concurrency:      10,
+		BatchSize:        100, // Maximum items per API request (Cloudflare limit)
+		Concurrency:      50,  // Enterprise tier concurrency
 		ProgressCallback: func(completed, total, successful int) {},
 	}
 }

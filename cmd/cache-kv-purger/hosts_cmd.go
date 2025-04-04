@@ -160,8 +160,16 @@ func createPurgeHostsCmd() *cobra.Command {
 
 			// Default batch size if not specified or invalid
 			if batchSize <= 0 {
-				batchSize = 30 // Cloudflare's default limit is 30
-			}
+				batchSize = 100 // API has a limit of 100 items per purge request
+\t			}
+				
+				// Ensure batch size is at most 100 (API limit)
+				if batchSize > 100 {
+					if verbose {
+						fmt.Println("Warning: Reducing batch size to 100 (Cloudflare API limit)")
+					}
+					batchSize = 100
+				}
 
 			// If only a few hosts, don't bother with batching
 			if len(allHosts) <= batchSize {
@@ -189,11 +197,11 @@ func createPurgeHostsCmd() *cobra.Command {
 			}
 
 			// For larger numbers, use batching with concurrency
-			// Cap concurrency to reasonable limits
+			// Cap concurrency for Enterprise tier
 			if cacheConcurrency <= 0 {
-				cacheConcurrency = 10 // Default
-			} else if cacheConcurrency > 20 {
-				cacheConcurrency = 20 // Max
+				cacheConcurrency = 50 // Enterprise tier default
+			} else if cacheConcurrency > 50 {
+				cacheConcurrency = 50 // Enterprise tier allows 50 requests per second
 			}
 
 			// Split hosts into batches (for preview in dry run mode)
@@ -259,7 +267,7 @@ func createPurgeHostsCmd() *cobra.Command {
 	cmd.Flags().StringArrayVar(&purgeFlagsVars.hosts, "host", []string{}, "Hostname to purge (can be specified multiple times)")
 	cmd.Flags().StringVar(&commaDelimitedHosts, "hosts", "", "Comma-delimited list of hostnames to purge (e.g., \"host1.com,host2.com,host3.com\")")
 	cmd.Flags().StringVar(&hostsFile, "hosts-file", "", "Path to a text file containing hostnames to purge (one host per line)")
-	cmd.Flags().IntVar(&batchSize, "batch-size", 30, "Maximum number of hosts to purge in each batch (default 30)")
+	cmd.Flags().IntVar(&batchSize, "batch-size", 100, "Maximum number of hosts to purge in each batch (API limit: 100 items per request)")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Show what would be purged without actually purging")
 	cmd.Flags().BoolVar(&autoZoneDetect, "auto-zone", false, "Auto-detect zones based on hostnames")
 

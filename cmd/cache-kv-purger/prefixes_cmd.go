@@ -134,8 +134,16 @@ func createPurgePrefixesCmd() *cobra.Command {
 
 			// Default batch size if not specified or invalid
 			if batchSize <= 0 {
-				batchSize = 30 // Cloudflare's default limit is 30
-			}
+				batchSize = 100 // API has a limit of 100 items per purge request
+\t			}
+				
+				// Ensure batch size is at most 100 (API limit)
+				if batchSize > 100 {
+					if verbose {
+						fmt.Println("Warning: Reducing batch size to 100 (Cloudflare API limit)")
+					}
+					batchSize = 100
+				}
 
 			// If only a few prefixes, don't bother with batching
 			if len(allPrefixes) <= batchSize {
@@ -177,11 +185,11 @@ func createPurgePrefixesCmd() *cobra.Command {
 				concurrency = cfg.GetCacheConcurrency()
 			}
 
-			// Cap concurrency to reasonable limits
+			// Cap concurrency for Enterprise tier
 			if concurrency <= 0 {
-				concurrency = 10 // Default
-			} else if concurrency > 20 {
-				concurrency = 20 // Max
+				concurrency = 50 // Enterprise tier default
+			} else if concurrency > 50 {
+				concurrency = 50 // Enterprise tier allows 50 requests per second
 			}
 
 			// Split prefixes into batches (for preview in dry run mode)
@@ -247,7 +255,7 @@ func createPurgePrefixesCmd() *cobra.Command {
 	cmd.Flags().StringArrayVar(&purgeFlagsVars.prefixes, "prefix", []string{}, "URL prefix to purge (can be specified multiple times)")
 	cmd.Flags().StringVar(&commaDelimitedPrefixes, "prefixes", "", "Comma-delimited list of URL prefixes to purge")
 	cmd.Flags().StringVar(&prefixesFile, "prefixes-file", "", "Path to a text file containing URL prefixes to purge (one prefix per line)")
-	cmd.Flags().IntVar(&batchSize, "batch-size", 30, "Maximum number of prefixes to purge in each batch (default 30)")
+	cmd.Flags().IntVar(&batchSize, "batch-size", 100, "Maximum number of prefixes to purge in each batch (API limit: 100 items per request)")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Show what would be purged without actually purging")
 
 	return cmd
