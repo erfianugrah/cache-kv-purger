@@ -74,7 +74,7 @@ func addMissingValueValidation(cmd *cobra.Command) {
 		if len(missingValues) > 0 {
 			return fmt.Errorf("missing values for flags: %v", missingValues)
 		}
-		
+
 		// Run the original function
 		if originalRunE != nil {
 			return originalRunE(cmd, args)
@@ -84,12 +84,12 @@ func addMissingValueValidation(cmd *cobra.Command) {
 		}
 		return nil
 	}
-	
+
 	// Clear the original Run function to avoid duplication
 	if cmd.Run != nil {
 		cmd.Run = nil
 	}
-	
+
 	// Recursively add to all subcommands
 	for _, subCmd := range cmd.Commands() {
 		addMissingValueValidation(subCmd)
@@ -101,10 +101,10 @@ func init() {
 
 	// Add common flags to kv command
 	kvCmd.PersistentFlags().StringVar(&kvFlagsVars.accountID, "account-id", "", "Cloudflare Account ID")
-	
+
 	// Add validation for missing values to all KV commands
 	addMissingValueValidation(kvCmd)
-	
+
 	// Note: All KV commands are now implemented using the verb-based approach,
 	// with consolidated commands registered in kv_consolidated_cmd.go
 

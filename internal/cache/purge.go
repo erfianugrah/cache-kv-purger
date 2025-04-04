@@ -373,9 +373,9 @@ func PurgeHosts(client *api.Client, zoneID string, hosts []string) (*PurgeRespon
 
 // PurgeHostsInBatches purges hosts in batches with concurrency support
 // This is optimized for purging a large number of hosts
-func PurgeHostsInBatches(client *api.Client, zoneID string, hosts []string, 
+func PurgeHostsInBatches(client *api.Client, zoneID string, hosts []string,
 	progressCallback func(completed, total, successful int), concurrencyOverride int) ([]string, []error) {
-	
+
 	if zoneID == "" {
 		return nil, []error{fmt.Errorf("zone ID is required")}
 	}
@@ -471,7 +471,7 @@ func PurgeHostsInBatches(client *api.Client, zoneID string, hosts []string,
 
 	// Track progress for callback
 	completed := 0
-	
+
 	// Collect results from all batches
 	for i := 0; i < len(batches); i++ {
 		result := <-resultChan
@@ -485,7 +485,7 @@ func PurgeHostsInBatches(client *api.Client, zoneID string, hosts []string,
 
 		// Update progress
 		completed++
-		
+
 		// Call progress callback
 		progressCallback(completed, len(batches), len(successful))
 	}
@@ -503,9 +503,9 @@ func PurgePrefixes(client *api.Client, zoneID string, prefixes []string) (*Purge
 
 // PurgePrefixesInBatches purges prefixes in batches with concurrency support
 // This is optimized for purging a large number of prefixes
-func PurgePrefixesInBatches(client *api.Client, zoneID string, prefixes []string, 
+func PurgePrefixesInBatches(client *api.Client, zoneID string, prefixes []string,
 	progressCallback func(completed, total, successful int), concurrencyOverride int) ([]string, []error) {
-	
+
 	if zoneID == "" {
 		return nil, []error{fmt.Errorf("zone ID is required")}
 	}
@@ -601,7 +601,7 @@ func PurgePrefixesInBatches(client *api.Client, zoneID string, prefixes []string
 
 	// Track progress for callback
 	completed := 0
-	
+
 	// Collect results from all batches
 	for i := 0; i < len(batches); i++ {
 		result := <-resultChan
@@ -615,7 +615,7 @@ func PurgePrefixesInBatches(client *api.Client, zoneID string, prefixes []string
 
 		// Update progress
 		completed++
-		
+
 		// Call progress callback
 		progressCallback(completed, len(batches), len(successful))
 	}
@@ -724,7 +724,7 @@ func PurgeTagsInBatches(client *api.Client, zoneID string, tags []string, progre
 
 	// Track progress for callback
 	completed := 0
-	
+
 	// Collect results from all batches
 	for i := 0; i < len(batches); i++ {
 		result := <-resultChan
@@ -738,7 +738,7 @@ func PurgeTagsInBatches(client *api.Client, zoneID string, tags []string, progre
 
 		// Update progress
 		completed++
-		
+
 		// Call progress callback
 		progressCallback(completed, len(batches), len(successful))
 	}

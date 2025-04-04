@@ -15,7 +15,7 @@ func handleHostZoneDetection(client *api.Client, accountID string, hosts []strin
 	verbose, _ := cmd.Flags().GetBool("verbose")
 	dryRun, _ := cmd.Flags().GetBool("dry-run")
 	batchSize, _ := cmd.Flags().GetInt("batch-size")
-	
+
 	if batchSize <= 0 {
 		batchSize = 30 // Default batch size if not specified
 	}
@@ -114,33 +114,33 @@ func handleHostZoneDetection(client *api.Client, accountID string, hosts []strin
 	// Process each zone
 	successCount := 0
 	totalItems := 0
-	
+
 	// For dry-run, just show what would be purged
 	if dryRun {
 		fmt.Printf("DRY RUN: Would purge items across %d zones\n", len(itemsByZone))
 		for zoneID, items := range itemsByZone {
 			// Remove duplicates
 			items = removeDuplicates(items)
-			
+
 			// Get zone info for display
 			zoneInfo, err := getZoneInfo(client, zoneID)
 			zoneName := zoneID
 			if err == nil && zoneInfo.Result.Name != "" {
 				zoneName = zoneInfo.Result.Name
 			}
-			
+
 			// Determine what type of item we're purging (files or hosts)
 			itemType := "hosts"
 			if len(items) > 0 && strings.HasPrefix(items[0], "http") {
 				itemType = "files"
 			}
-			
+
 			// Calculate batches for display
 			batches := splitIntoBatches(items, batchSize)
-			
-			fmt.Printf("Zone: %s - would purge %d %s in %d batches using %d concurrent workers\n", 
+
+			fmt.Printf("Zone: %s - would purge %d %s in %d batches using %d concurrent workers\n",
 				zoneName, len(items), itemType, len(batches), cacheConcurrency)
-			
+
 			if verbose {
 				for i, batch := range batches {
 					fmt.Printf("  Batch %d: %d items\n", i+1, len(batch))
@@ -154,14 +154,14 @@ func handleHostZoneDetection(client *api.Client, accountID string, hosts []strin
 					}
 				}
 			}
-			
+
 			totalItems += len(items)
 		}
-		
+
 		fmt.Printf("DRY RUN SUMMARY: Would purge %d total items across %d zones\n", totalItems, len(itemsByZone))
 		return nil
 	}
-	
+
 	// Process all zones with actual purging
 	for zoneID, items := range itemsByZone {
 		// Remove duplicates
@@ -181,21 +181,21 @@ func handleHostZoneDetection(client *api.Client, accountID string, hosts []strin
 			if verbose {
 				fmt.Printf("Purging %d files for zone %s...\n", len(items), zoneName)
 			}
-			
+
 			// For large number of files, use batching
 			if len(items) > batchSize {
 				// For specialized function for files with headers when implemented in the future:
 				// progressFn := func(completed, total, successful int) {
 				//     if verbose {
-				//         fmt.Printf("Progress for zone %s: processed %d/%d batches, %d files purged\n", 
+				//         fmt.Printf("Progress for zone %s: processed %d/%d batches, %d files purged\n",
 				//             zoneName, completed, total, successful)
 				//     } else {
-				//         fmt.Printf("Zone %s: processing batch %d/%d: %d files purged so far...  \r", 
+				//         fmt.Printf("Zone %s: processing batch %d/%d: %d files purged so far...  \r",
 				//             zoneName, completed, total, successful)
 				//     }
 				// }
 				// successful, errors := PurgeFilesInBatches(client, zoneID, items, progressFn, cacheConcurrency)
-				
+
 				// For now, use standard API as batch function for files isn't implemented yet
 				resp, err := cache.PurgeFiles(client, zoneID, items)
 				if err != nil {
@@ -219,28 +219,28 @@ func handleHostZoneDetection(client *api.Client, accountID string, hosts []strin
 			if verbose {
 				fmt.Printf("Purging %d hosts for zone %s...\n", len(items), zoneName)
 			}
-			
+
 			// For large number of hosts, use batching with concurrency
 			if len(items) > batchSize {
 				// Create progress function
 				progressFn := func(completed, total, successful int) {
 					if verbose {
-						fmt.Printf("Progress for zone %s: processed %d/%d batches, %d hosts purged\n", 
+						fmt.Printf("Progress for zone %s: processed %d/%d batches, %d hosts purged\n",
 							zoneName, completed, total, successful)
 					} else {
-						fmt.Printf("Zone %s: processing batch %d/%d: %d hosts purged so far...  \r", 
+						fmt.Printf("Zone %s: processing batch %d/%d: %d hosts purged so far...  \r",
 							zoneName, completed, total, successful)
 					}
 				}
-				
+
 				// Process hosts with concurrent batching
 				successful, errors := cache.PurgeHostsInBatches(client, zoneID, items, progressFn, cacheConcurrency)
-				
+
 				// Print a newline to clear the progress line
 				if !verbose {
 					fmt.Println()
 				}
-				
+
 				// Report errors if any
 				if len(errors) > 0 {
 					fmt.Printf("Encountered %d errors during purging for zone %s:\n", len(errors), zoneName)
@@ -254,7 +254,7 @@ func handleHostZoneDetection(client *api.Client, accountID string, hosts []strin
 					}
 					continue
 				}
-				
+
 				fmt.Printf("Successfully purged %d hosts from zone %s\n", len(successful), zoneName)
 				successCount++
 			} else {

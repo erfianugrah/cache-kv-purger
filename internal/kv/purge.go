@@ -898,11 +898,11 @@ func SmartFindKeysWithValue(client *api.Client, accountID, namespaceID, searchVa
 			defer func() { <-semaphore }()
 
 			chunkMatched := 0
-			
+
 			// Process each key in this chunk
 			for j, key := range chunk {
 				processedIdx := chunkStartIdx + j
-				
+
 				// Step 1: Check if metadata already available from list response
 				if key.Metadata != nil {
 					// Use smart recursive search on the metadata
@@ -946,7 +946,7 @@ func SmartFindKeysWithValue(client *api.Client, accountID, namespaceID, searchVa
 						}
 					}
 				}
-				
+
 				// Update progress periodically (not on every item to reduce overhead)
 				if j%20 == 0 || j == len(chunk)-1 {
 					mu.Lock()
@@ -958,7 +958,7 @@ func SmartFindKeysWithValue(client *api.Client, accountID, namespaceID, searchVa
 					mu.Unlock()
 				}
 			}
-			
+
 			// Final progress update for this chunk
 			mu.Lock()
 			progressCallback(totalKeys, totalProcessed, totalMatched, totalKeys)
@@ -1017,7 +1017,7 @@ func SmartPurgeByValue(client *api.Client, accountID, namespaceID, searchValue s
 		func(keysFetched, keysProcessed, keysMatched, total int) {
 			progressCallback(keysFetched, keysProcessed, keysMatched, 0, total)
 		})
-	
+
 	if err != nil {
 		return 0, fmt.Errorf("failed to find keys with value '%s': %w", searchValue, err)
 	}

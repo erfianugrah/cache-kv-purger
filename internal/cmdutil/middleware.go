@@ -15,7 +15,7 @@ func WithConfig(fn func(*cobra.Command, []string, *config.Config) error) func(*c
 			// Create a default config if not found
 			cfg = config.New()
 		}
-		
+
 		return fn(cmd, args, cfg)
 	}
 }
@@ -27,7 +27,7 @@ func WithClient(fn func(*cobra.Command, []string, *api.Client) error) func(*cobr
 		if err != nil {
 			return fmt.Errorf("failed to create API client: %w", err)
 		}
-		
+
 		return fn(cmd, args, client)
 	}
 }
@@ -40,12 +40,12 @@ func WithConfigAndClient(fn func(*cobra.Command, []string, *config.Config, *api.
 			// Create a default config if not found
 			cfg = config.New()
 		}
-		
+
 		client, err := api.NewClient()
 		if err != nil {
 			return fmt.Errorf("failed to create API client: %w", err)
 		}
-		
+
 		return fn(cmd, args, cfg, client)
 	}
 }

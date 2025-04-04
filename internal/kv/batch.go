@@ -347,7 +347,7 @@ func DeleteMultipleValuesConcurrently(client *api.Client, accountID, namespaceID
 
 		// Update progress
 		completed++
-		
+
 		// Call progress callback
 		progressCallback(completed, len(batches))
 	}

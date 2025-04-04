@@ -20,7 +20,7 @@ func NewCommand(use, short, long string) *CommandBuilder {
 		Short: short,
 		Long:  long,
 	}
-	
+
 	// Add a pre-run hook that will:
 	// 1. Check if --help is present and prioritize it
 	// 2. Validate that flags have values if they're specified
@@ -31,7 +31,7 @@ func NewCommand(use, short, long string) *CommandBuilder {
 			cmd.Help()
 			return fmt.Errorf("help requested")
 		}
-		
+
 		// Validate that all flags provided have values
 		var missingValues []string
 		cmd.Flags().Visit(func(f *pflag.Flag) {
@@ -46,20 +46,20 @@ func NewCommand(use, short, long string) *CommandBuilder {
 				}
 			}
 		})
-		
+
 		if len(missingValues) > 0 {
 			return fmt.Errorf("the following flags require values: %s", strings.Join(missingValues, ", "))
 		}
-		
+
 		// If parent has PreRunE, run it
 		if cmd.Parent() != nil && cmd.Parent().PersistentPreRunE != nil {
 			// We can't compare functions directly, but we can just run the parent's
 			return cmd.Parent().PersistentPreRunE(cmd, args)
 		}
-		
+
 		return nil
 	}
-	
+
 	return &CommandBuilder{
 		cmd: cmd,
 	}
@@ -148,7 +148,7 @@ func AddFlagValidation(cmd *cobra.Command) {
 	// Store the original PreRun/PreRunE if they exist
 	originalPreRun := cmd.PreRun
 	originalPreRunE := cmd.PreRunE
-	
+
 	// Add our validation logic
 	cmd.PreRunE = func(cmd *cobra.Command, args []string) error {
 		// If this is a help request, skip validation
@@ -156,7 +156,7 @@ func AddFlagValidation(cmd *cobra.Command) {
 			cmd.Help()
 			return fmt.Errorf("help requested")
 		}
-		
+
 		// Validate that all flags provided have values
 		var missingValues []string
 		cmd.Flags().Visit(func(f *pflag.Flag) {
@@ -168,24 +168,24 @@ func AddFlagValidation(cmd *cobra.Command) {
 				}
 			}
 		})
-		
+
 		if len(missingValues) > 0 {
 			return fmt.Errorf("the following flags require values: %s", strings.Join(missingValues, ", "))
 		}
-		
+
 		// Run the original PreRunE if it exists
 		if originalPreRunE != nil {
 			return originalPreRunE(cmd, args)
 		}
-		
+
 		// Run the original PreRun if it exists
 		if originalPreRun != nil {
 			originalPreRun(cmd, args)
 		}
-		
+
 		return nil
 	}
-	
+
 	// Apply the same validation to all subcommands
 	for _, subCmd := range cmd.Commands() {
 		AddFlagValidation(subCmd)

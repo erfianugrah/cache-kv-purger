@@ -15,32 +15,32 @@ func handleMultiZoneFilePurge(client *api.Client, zoneIDs []string, files []stri
 	verbose, _ := cmd.Flags().GetBool("verbose")
 	dryRun, _ := cmd.Flags().GetBool("dry-run")
 	batchSize, _ := cmd.Flags().GetInt("batch-size")
-	
+
 	if batchSize <= 0 {
 		batchSize = 30 // Default batch size if not specified
 	}
-	
+
 	// Get concurrency settings
 	cacheConcurrency := purgeFlagsVars.cacheConcurrency
 	multiZoneConcurrency := purgeFlagsVars.multiZoneConcurrency
-	
+
 	// Get config for default concurrency values if not set
 	cfg, _ := config.LoadFromFile("")
 	if cacheConcurrency <= 0 && cfg != nil {
 		cacheConcurrency = cfg.GetCacheConcurrency()
 	}
-	
+
 	if multiZoneConcurrency <= 0 && cfg != nil {
 		multiZoneConcurrency = cfg.GetMultiZoneConcurrency()
 	}
-	
+
 	// Cap concurrency to reasonable limits
 	if cacheConcurrency <= 0 {
 		cacheConcurrency = 10 // Default
 	} else if cacheConcurrency > 20 {
 		cacheConcurrency = 20 // Max
 	}
-	
+
 	if multiZoneConcurrency <= 0 {
 		multiZoneConcurrency = 3 // Default
 	} else if multiZoneConcurrency > 5 {
@@ -118,7 +118,7 @@ func handleMultiZoneFilePurge(client *api.Client, zoneIDs []string, files []stri
 	if dryRun {
 		fmt.Printf("DRY RUN: Would purge files across %d zones\n", len(filesByZone))
 		totalFiles := 0
-		
+
 		for zoneID, zoneFiles := range filesByZone {
 			if len(zoneFiles) == 0 {
 				if verbose {
@@ -126,17 +126,17 @@ func handleMultiZoneFilePurge(client *api.Client, zoneIDs []string, files []stri
 				}
 				continue
 			}
-			
+
 			// Remove duplicates
 			zoneFiles = removeDuplicates(zoneFiles)
 			totalFiles += len(zoneFiles)
-			
+
 			// Calculate batches for display
 			batches := splitIntoBatches(zoneFiles, batchSize)
-			
-			fmt.Printf("Zone %s: Would purge %d files in %d batches using %d concurrent workers\n", 
+
+			fmt.Printf("Zone %s: Would purge %d files in %d batches using %d concurrent workers\n",
 				zoneNames[zoneID], len(zoneFiles), len(batches), cacheConcurrency)
-			
+
 			if verbose {
 				for i, batch := range batches {
 					fmt.Printf("  Batch %d: %d files\n", i+1, len(batch))
@@ -151,7 +151,7 @@ func handleMultiZoneFilePurge(client *api.Client, zoneIDs []string, files []stri
 				}
 			}
 		}
-		
+
 		fmt.Printf("DRY RUN SUMMARY: Would purge %d total files across %d zones\n", totalFiles, len(filesByZone))
 		return nil
 	}
@@ -159,7 +159,7 @@ func handleMultiZoneFilePurge(client *api.Client, zoneIDs []string, files []stri
 	// Process each zone
 	successCount := 0
 	totalFiles := 0
-	
+
 	// Use a simple sequential approach for now since we don't have a specialized PurgeFilesInBatches function yet
 	// Future enhancement: Process zones concurrently with batched file operations
 	for _, zoneID := range zoneIDs {
@@ -191,7 +191,7 @@ func handleMultiZoneFilePurge(client *api.Client, zoneIDs []string, files []stri
 		//     // Process with batching...
 		//     successful, errors := cache.PurgeFilesInBatches(client, zoneID, zoneFiles, progressFn, cacheConcurrency)
 		// }
-		
+
 		// Make the API call to purge files
 		resp, err := cache.PurgeFiles(client, zoneID, zoneFiles)
 		if err != nil {

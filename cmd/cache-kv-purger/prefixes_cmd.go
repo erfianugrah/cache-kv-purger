@@ -135,15 +135,15 @@ func createPurgePrefixesCmd() *cobra.Command {
 			// Default batch size if not specified or invalid
 			if batchSize <= 0 {
 				batchSize = 100 // API has a limit of 100 items per purge request
-\t			}
-				
-				// Ensure batch size is at most 100 (API limit)
-				if batchSize > 100 {
-					if verbose {
-						fmt.Println("Warning: Reducing batch size to 100 (Cloudflare API limit)")
-					}
-					batchSize = 100
+			}
+
+			// Ensure batch size is at most 100 (API limit)
+			if batchSize > 100 {
+				if verbose {
+					fmt.Println("Warning: Reducing batch size to 100 (Cloudflare API limit)")
 				}
+				batchSize = 100
+			}
 
 			// If only a few prefixes, don't bother with batching
 			if len(allPrefixes) <= batchSize {
@@ -166,15 +166,15 @@ func createPurgePrefixesCmd() *cobra.Command {
 					return fmt.Errorf("failed to purge prefixes: %w", err)
 				}
 
-					// Format success with key-value table
-					data := make(map[string]string)
-					data["Operation"] = "Purge Prefixes"
-					data["Zone"] = resolvedZoneID
-					data["Prefixes Purged"] = fmt.Sprintf("%d", len(allPrefixes))
-					data["Purge ID"] = resp.Result.ID
-					data["Status"] = "Success"
-					
-					common.FormatKeyValueTable(data)
+				// Format success with key-value table
+				data := make(map[string]string)
+				data["Operation"] = "Purge Prefixes"
+				data["Zone"] = resolvedZoneID
+				data["Prefixes Purged"] = fmt.Sprintf("%d", len(allPrefixes))
+				data["Purge ID"] = resp.Result.ID
+				data["Status"] = "Success"
+
+				common.FormatKeyValueTable(data)
 				return nil
 			}
 
@@ -196,7 +196,7 @@ func createPurgePrefixesCmd() *cobra.Command {
 			batches := splitIntoBatches(allPrefixes, batchSize)
 
 			if verbose {
-				fmt.Printf("Preparing to purge %d prefixes in %d batches using %d concurrent workers\n", 
+				fmt.Printf("Preparing to purge %d prefixes in %d batches using %d concurrent workers\n",
 					len(allPrefixes), len(batches), concurrency)
 			}
 
@@ -217,10 +217,10 @@ func createPurgePrefixesCmd() *cobra.Command {
 			// Create progress function
 			progressFn := func(completed, total, successful int) {
 				if verbose {
-					fmt.Printf("Progress: processed %d/%d batches, %d prefixes purged\n", 
+					fmt.Printf("Progress: processed %d/%d batches, %d prefixes purged\n",
 						completed, total, successful)
 				} else {
-					fmt.Printf("Processing batch %d/%d: %d prefixes purged so far...  \r", 
+					fmt.Printf("Processing batch %d/%d: %d prefixes purged so far...  \r",
 						completed, total, successful)
 				}
 			}

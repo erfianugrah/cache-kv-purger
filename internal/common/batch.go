@@ -10,12 +10,12 @@ type BatchResult struct {
 
 // BatchProcessor handles batch processing with configurable concurrency
 type BatchProcessor struct {
-	// Batch size for processing 
+	// Batch size for processing
 	BatchSize int
-	
+
 	// Maximum number of concurrent operations
 	Concurrency int
-	
+
 	// Progress callback to report progress
 	// completed: number of completed batches
 	// total: total number of batches
@@ -78,7 +78,7 @@ func (p *BatchProcessor) ProcessStrings(items []string, processor func([]string)
 	// Process each batch (simplified version without concurrency for now)
 	var successful []string
 	var errors []error
-	
+
 	for batchIdx, batch := range batches {
 		results, err := processor(batch)
 		if err != nil {
@@ -86,7 +86,7 @@ func (p *BatchProcessor) ProcessStrings(items []string, processor func([]string)
 		} else {
 			successful = append(successful, results...)
 		}
-		
+
 		p.ProgressCallback(batchIdx+1, len(batches), len(successful))
 	}
 

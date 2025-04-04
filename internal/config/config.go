@@ -19,10 +19,10 @@ const (
 	EnvMultiZoneConcurrency = "CLOUDFLARE_MULTI_ZONE_CONCURRENCY"
 
 	// Default concurrency values for Enterprise tier
-	DefaultCacheConcurrency     = 50  // Enterprise tier allows 50 requests per second
-	DefaultMaxCacheConcurrency  = 50  // Enterprise tier cap
-	DefaultMultiZoneConcurrency = 10  // Increased for Enterprise performance
-	
+	DefaultCacheConcurrency     = 50 // Enterprise tier allows 50 requests per second
+	DefaultMaxCacheConcurrency  = 50 // Enterprise tier cap
+	DefaultMultiZoneConcurrency = 10 // Increased for Enterprise performance
+
 	// Default batch size per API limits
 	DefaultBatchSize = 100 // Maximum items per API request (Cloudflare limit)
 )

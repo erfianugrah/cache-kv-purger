@@ -50,33 +50,33 @@ This powerful command combines the KV search capabilities with cache purging to:
 		dryRun, _ := cmd.Flags().GetBool("dry-run")
 		batchSize, _ := cmd.Flags().GetInt("batch-size")
 		concurrency, _ := cmd.Flags().GetInt("concurrency")
-		
+
 		// Validate inputs
 		if (searchValue == "" && tagField == "") || (namespaceID == "" && namespace == "") {
 			return fmt.Errorf("either search or tag-field, and either namespace-id or namespace are required")
 		}
-		
+
 		if len(cacheTags) == 0 {
 			return fmt.Errorf("at least one cache-tag is required")
 		}
 
 		// Load config and fallback values
 		cfg, _ := config.LoadFromFile("")
-		
+
 		// Load account ID if not provided
 		if accountID == "" && cfg != nil {
 			accountID = cfg.GetAccountID()
 		}
-		
+
 		// Create API client
 		client, err := api.NewClient()
 		if err != nil {
 			return fmt.Errorf("failed to create API client: %w", err)
 		}
-		
+
 		// Create KV service
 		kvService := kv.NewKVService(client)
-		
+
 		// Resolve namespace if name is provided
 		if namespace != "" && namespaceID == "" {
 			nsID, err := kvService.ResolveNamespaceID(cmd.Context(), accountID, namespace)
@@ -85,9 +85,9 @@ This powerful command combines the KV search capabilities with cache purging to:
 			}
 			namespaceID = nsID
 		}
-		
+
 		fmt.Println("Step 1: Searching for matching KV keys...")
-		
+
 		// Search for keys
 		searchOptions := kv.SearchOptions{
 			SearchValue: searchValue,
@@ -96,20 +96,20 @@ This powerful command combines the KV search capabilities with cache purging to:
 			BatchSize:   batchSize,
 			Concurrency: concurrency,
 		}
-		
+
 		matchingKeys, err := kvService.Search(cmd.Context(), accountID, namespaceID, searchOptions)
 		if err != nil {
 			return fmt.Errorf("search failed: %w", err)
 		}
-		
+
 		// Extract key names
 		keyNames := make([]string, len(matchingKeys))
 		for i, key := range matchingKeys {
 			keyNames[i] = key.Key
 		}
-		
+
 		fmt.Printf("Found %d matching KV keys\n", len(keyNames))
-		
+
 		// If verbose and keys found, show a sample
 		verbose, _ := cmd.Flags().GetBool("verbose")
 		if verbose && len(keyNames) > 0 {
@@ -117,20 +117,20 @@ This powerful command combines the KV search capabilities with cache purging to:
 			if len(keyNames) < maxDisplay {
 				maxDisplay = len(keyNames)
 			}
-			
+
 			fmt.Println("Sample matching keys:")
 			for i := 0; i < maxDisplay; i++ {
 				fmt.Printf("  %s\n", keyNames[i])
 			}
-			
+
 			if len(keyNames) > maxDisplay {
-				fmt.Printf("  ...and %d more\n", len(keyNames) - maxDisplay)
+				fmt.Printf("  ...and %d more\n", len(keyNames)-maxDisplay)
 			}
 		}
-		
+
 		// Step 2: Delete the keys
 		fmt.Println("\nStep 2: Deleting matching KV keys...")
-		
+
 		if len(keyNames) > 0 {
 			if dryRun {
 				fmt.Printf("DRY RUN: Would delete %d KV keys\n", len(keyNames))
@@ -142,16 +142,16 @@ This powerful command combines the KV search capabilities with cache purging to:
 					if batchSize > 0 {
 						displayBatchSize = batchSize
 					}
-					
+
 					displayConcurrency := 10
 					if concurrency > 0 {
 						displayConcurrency = concurrency
 					}
-					
-					fmt.Printf("Deleting %d keys with batch size %d and concurrency %d\n", 
+
+					fmt.Printf("Deleting %d keys with batch size %d and concurrency %d\n",
 						len(keyNames), displayBatchSize, displayConcurrency)
 				}
-				
+
 				deleteOptions := kv.BulkDeleteOptions{
 					BatchSize:   batchSize,
 					Concurrency: concurrency,
@@ -163,13 +163,13 @@ This powerful command combines the KV search capabilities with cache purging to:
 				if err != nil {
 					return fmt.Errorf("KV deletion failed: %w", err)
 				}
-				
+
 				// Format KV deletion results with key-value table
 				kvData := make(map[string]string)
 				kvData["Operation"] = "KV Deletion"
 				kvData["Keys Deleted"] = fmt.Sprintf("%d/%d", count, len(keyNames))
 				kvData["Status"] = "Success"
-				
+
 				common.FormatKeyValueTable(kvData)
 			}
 		} else {
@@ -192,7 +192,7 @@ This powerful command combines the KV search capabilities with cache purging to:
 			if err != nil {
 				return fmt.Errorf("cache purge failed: %w", err)
 			}
-			
+
 			// Format cache purge results with key-value table
 			cacheData := make(map[string]string)
 			cacheData["Operation"] = "Cache Tag Purge"
@@ -200,7 +200,7 @@ This powerful command combines the KV search capabilities with cache purging to:
 			cacheData["Tags Purged"] = strings.Join(cacheTags, ", ")
 			cacheData["Purge ID"] = resp.Result.ID
 			cacheData["Status"] = "Success"
-			
+
 			common.FormatKeyValueTable(cacheData)
 		}
 
@@ -214,7 +214,7 @@ This powerful command combines the KV search capabilities with cache purging to:
 		}
 		resultData["KV Keys Found"] = fmt.Sprintf("%d", len(keyNames))
 		resultData["Cache Tags"] = fmt.Sprintf("%d", len(cacheTags))
-		
+
 		fmt.Println()
 		common.FormatKeyValueTable(resultData)
 		return nil
@@ -224,7 +224,7 @@ This powerful command combines the KV search capabilities with cache purging to:
 func init() {
 	// Add combined/sync command to root
 	rootCmd.AddCommand(combinedCmd)
-	
+
 	// Add purge command to sync
 	combinedCmd.AddCommand(syncPurgeCmd)
 
@@ -237,7 +237,7 @@ func init() {
 	syncPurgeCmd.Flags().String("tag-value", "", "Value to match in the tag field")
 	syncPurgeCmd.Flags().String("zone", "", "Zone ID or name to purge content from")
 	syncPurgeCmd.Flags().StringSlice("cache-tag", []string{}, "Cache tags to purge (can specify multiple times)")
-	
+
 	// Operation options
 	syncPurgeCmd.Flags().Bool("dry-run", false, "Show what would be done without making changes")
 	syncPurgeCmd.Flags().Int("batch-size", 0, "Batch size for KV operations")

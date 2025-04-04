@@ -161,15 +161,15 @@ func createPurgeHostsCmd() *cobra.Command {
 			// Default batch size if not specified or invalid
 			if batchSize <= 0 {
 				batchSize = 100 // API has a limit of 100 items per purge request
-\t			}
-				
-				// Ensure batch size is at most 100 (API limit)
-				if batchSize > 100 {
-					if verbose {
-						fmt.Println("Warning: Reducing batch size to 100 (Cloudflare API limit)")
-					}
-					batchSize = 100
+			}
+
+			// Ensure batch size is at most 100 (API limit)
+			if batchSize > 100 {
+				if verbose {
+					fmt.Println("Warning: Reducing batch size to 100 (Cloudflare API limit)")
 				}
+				batchSize = 100
+			}
 
 			// If only a few hosts, don't bother with batching
 			if len(allHosts) <= batchSize {
@@ -208,7 +208,7 @@ func createPurgeHostsCmd() *cobra.Command {
 			batches := splitIntoBatches(allHosts, batchSize)
 
 			if verbose {
-				fmt.Printf("Preparing to purge %d hosts in %d batches using %d concurrent workers\n", 
+				fmt.Printf("Preparing to purge %d hosts in %d batches using %d concurrent workers\n",
 					len(allHosts), len(batches), cacheConcurrency)
 			}
 
@@ -229,10 +229,10 @@ func createPurgeHostsCmd() *cobra.Command {
 			// Create progress function
 			progressFn := func(completed, total, successful int) {
 				if verbose {
-					fmt.Printf("Progress: processed %d/%d batches, %d hosts purged\n", 
+					fmt.Printf("Progress: processed %d/%d batches, %d hosts purged\n",
 						completed, total, successful)
 				} else {
-					fmt.Printf("Processing batch %d/%d: %d hosts purged so far...  \r", 
+					fmt.Printf("Processing batch %d/%d: %d hosts purged so far...  \r",
 						completed, total, successful)
 				}
 			}

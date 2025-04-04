@@ -15,22 +15,22 @@ import (
 func NewKVListCommand() *CommandBuilder {
 	// Define flag variables
 	var opts struct {
-		accountID     string
-		namespaceID   string
-		namespace     string
-		key           string
-		prefix        string
-		pattern       string
-		limit         int
-		cursor        string
-		metadata      bool
-		values        bool
-		searchValue   string
-		tagField      string
-		tagValue      string
-		batchSize     int
-		concurrency   int
-		outputJSON    bool
+		accountID   string
+		namespaceID string
+		namespace   string
+		key         string
+		prefix      string
+		pattern     string
+		limit       int
+		cursor      string
+		metadata    bool
+		values      bool
+		searchValue string
+		tagField    string
+		tagValue    string
+		batchSize   int
+		concurrency int
+		outputJSON  bool
 	}
 
 	// Create command
@@ -154,7 +154,7 @@ When used with --namespace-id or --namespace, lists keys in the specified namesp
 				if key.Expiration > 0 {
 					data["Expiration"] = fmt.Sprintf("%d", key.Expiration)
 				}
-				
+
 				// Show metadata if available
 				if key.Metadata != nil {
 					metaStr := ""
@@ -166,7 +166,7 @@ When used with --namespace-id or --namespace, lists keys in the specified namesp
 					}
 					data["Metadata"] = metaStr
 				}
-				
+
 				// Show value if requested
 				if opts.values {
 					// Truncate long values for display
@@ -176,7 +176,7 @@ When used with --namespace-id or --namespace, lists keys in the specified namesp
 					}
 					data["Value"] = valueDisplay
 				}
-				
+
 				common.FormatKeyValueTable(data)
 				return nil
 			}
@@ -198,7 +198,7 @@ When used with --namespace-id or --namespace, lists keys in the specified namesp
 
 				// Check for the enhanced "deep search" capability
 				fmt.Println("Searching for keys...")
-				
+
 				searchOptions := kv.SearchOptions{
 					SearchValue:     opts.searchValue,
 					TagField:        opts.tagField,
@@ -231,38 +231,38 @@ When used with --namespace-id or --namespace, lists keys in the specified namesp
 
 				// Table format
 				fmt.Printf("\nFound %d matching keys:\n", len(keys))
-				
+
 				// If we have no results, exit early
 				if len(keys) == 0 {
 					fmt.Println("No keys match the search criteria.")
 					return nil
 				}
-				
+
 				// Prepare table data
 				var headers []string
 				var rows [][]string
-				
+
 				if opts.metadata {
 					headers = []string{"Key", "Expiration", "Metadata"}
 					rows = make([][]string, len(keys))
-					
+
 					for i, key := range keys {
 						expStr := ""
 						if key.Expiration > 0 {
 							expStr = fmt.Sprintf("%d", key.Expiration)
 						}
-						
+
 						metaStr := "<none>"
 						if key.Metadata != nil {
 							metaStr = fmt.Sprintf("%v", *key.Metadata)
 						}
-						
+
 						rows[i] = []string{key.Key, expStr, metaStr}
 					}
 				} else {
 					headers = []string{"Key", "Expiration"}
 					rows = make([][]string, len(keys))
-					
+
 					for i, key := range keys {
 						expStr := ""
 						if key.Expiration > 0 {
@@ -271,14 +271,14 @@ When used with --namespace-id or --namespace, lists keys in the specified namesp
 						rows[i] = []string{key.Key, expStr}
 					}
 				}
-				
+
 				common.FormatTable(headers, rows)
-				
+
 				// Include note about metadata
 				if !opts.metadata && len(keys) > 0 {
 					fmt.Println("\nTip: Use --metadata to see metadata for these keys")
 				}
-				
+
 				return nil
 			}
 
@@ -295,32 +295,32 @@ When used with --namespace-id or --namespace, lists keys in the specified namesp
 
 			// Table format
 			fmt.Printf("Keys in namespace (%d):\n", len(result.Keys))
-			
+
 			// Prepare table data
 			var headers []string
 			var rows [][]string
-			
+
 			if opts.metadata {
 				headers = []string{"Key", "Expiration", "Metadata"}
 				rows = make([][]string, len(result.Keys))
-				
+
 				for i, key := range result.Keys {
 					expStr := ""
 					if key.Expiration > 0 {
 						expStr = fmt.Sprintf("%d", key.Expiration)
 					}
-					
+
 					metaStr := "<none>"
 					if key.Metadata != nil {
 						metaStr = fmt.Sprintf("%v", *key.Metadata)
 					}
-					
+
 					rows[i] = []string{key.Key, expStr, metaStr}
 				}
 			} else {
 				headers = []string{"Key", "Expiration"}
 				rows = make([][]string, len(result.Keys))
-				
+
 				for i, key := range result.Keys {
 					expStr := ""
 					if key.Expiration > 0 {
@@ -329,9 +329,9 @@ When used with --namespace-id or --namespace, lists keys in the specified namesp
 					rows[i] = []string{key.Key, expStr}
 				}
 			}
-			
+
 			common.FormatTable(headers, rows)
-			
+
 			// Include note about metadata if appropriate
 			if !opts.metadata && len(result.Keys) > 0 {
 				fmt.Println("\nTip: Use --metadata to see metadata information")

@@ -38,11 +38,11 @@ func SummarizeBatchErrors(errors []error) string {
 	if len(errors) == 0 {
 		return "No errors"
 	}
-	
+
 	if len(errors) == 1 {
 		return fmt.Sprintf("1 error: %v", errors[0])
 	}
-	
+
 	return fmt.Sprintf("%d errors, first error: %v", len(errors), errors[0])
 }
 

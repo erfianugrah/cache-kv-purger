@@ -39,11 +39,11 @@ type KVService interface {
 
 // ListOptions represents options for listing keys
 type ListOptions struct {
-	Limit          int
-	Cursor         string
-	Prefix         string
-	Pattern        string
-	IncludeValues  bool
+	Limit           int
+	Cursor          string
+	Prefix          string
+	Pattern         string
+	IncludeValues   bool
 	IncludeMetadata bool
 }
 
@@ -69,18 +69,18 @@ type BulkWriteOptions struct {
 
 // BulkDeleteOptions represents options for bulk delete operations
 type BulkDeleteOptions struct {
-	BatchSize         int
-	Concurrency       int
-	DryRun            bool
-	Force             bool
-	Verbose           bool // Enable verbose output
-	Prefix            string
-	PrefixSpecified   bool // Whether prefix was explicitly specified, even if empty
-	AllKeys           bool // Whether to delete all keys in the namespace
-	Pattern           string
-	TagField          string
-	TagValue          string
-	SearchValue       string
+	BatchSize       int
+	Concurrency     int
+	DryRun          bool
+	Force           bool
+	Verbose         bool // Enable verbose output
+	Prefix          string
+	PrefixSpecified bool // Whether prefix was explicitly specified, even if empty
+	AllKeys         bool // Whether to delete all keys in the namespace
+	Pattern         string
+	TagField        string
+	TagValue        string
+	SearchValue     string
 }
 
 // SearchOptions represents options for searching keys
@@ -208,7 +208,7 @@ func (s *CloudflareKVService) BulkGet(ctx context.Context, accountID, namespaceI
 	// This is a more complex operation that needs to be implemented
 	// For now, we'll just get each key individually
 	result := make([]KeyValuePair, 0, len(keys))
-	
+
 	for _, key := range keys {
 		kv, err := s.Get(ctx, accountID, namespaceID, key, ServiceGetOptions{
 			IncludeMetadata: options.IncludeMetadata,
@@ -219,7 +219,7 @@ func (s *CloudflareKVService) BulkGet(ctx context.Context, accountID, namespaceI
 		}
 		result = append(result, *kv)
 	}
-	
+
 	return result, nil
 }
 
@@ -228,7 +228,7 @@ func (s *CloudflareKVService) BulkPut(ctx context.Context, accountID, namespaceI
 	if options.Concurrency > 0 {
 		return WriteMultipleValuesConcurrently(s.client, accountID, namespaceID, items, options.BatchSize, options.Concurrency, nil)
 	}
-	
+
 	return WriteMultipleValuesInBatches(s.client, accountID, namespaceID, items, options.BatchSize, nil)
 }
 
@@ -243,7 +243,7 @@ func (s *CloudflareKVService) BulkDelete(ctx context.Context, accountID, namespa
 	}
 	// Handle filtering first to get an accurate count for dry run
 	var keysToDelete []string
-	
+
 	// If keys are provided, use them directly
 	if len(keys) > 0 {
 		keysToDelete = keys
@@ -255,24 +255,24 @@ func (s *CloudflareKVService) BulkDelete(ctx context.Context, accountID, namespa
 		// 3. Empty prefix specified with --prefix ""
 		// 4. Pattern-based filtering
 		shouldListAllKeys := options.AllKeys || options.Prefix != "" || options.PrefixSpecified || options.Pattern != ""
-		
+
 		if shouldListAllKeys {
-			debug("Finding keys with criteria: prefix='%s', pattern='%s', allKeys=%v", 
+			debug("Finding keys with criteria: prefix='%s', pattern='%s', allKeys=%v",
 				options.Prefix, options.Pattern, options.AllKeys)
-				
+
 			// Use existing pagination-aware function to list keys
 			listOptions := &ListKeysOptions{
 				Prefix: options.Prefix,
 				// Pattern is handled separately, not directly in the listing API
 			}
-			
+
 			allKeys, err := ListAllKeysWithOptions(s.client, accountID, namespaceID, listOptions, nil)
 			if err != nil {
 				return 0, fmt.Errorf("failed to list keys: %w", err)
 			}
-			
+
 			debug("Found %d keys matching criteria", len(allKeys))
-			
+
 			// Extract key names
 			keysToDelete = make([]string, len(allKeys))
 			for i, key := range allKeys {
@@ -282,38 +282,38 @@ func (s *CloudflareKVService) BulkDelete(ctx context.Context, accountID, namespa
 			debug("No keys or filtering criteria provided")
 		}
 	}
-	
-	// If we have tag-based filtering or search, use the appropriate functions 
+
+	// If we have tag-based filtering or search, use the appropriate functions
 	if options.TagField != "" || options.SearchValue != "" {
-		debug("Using advanced filtering with tag field '%s' or search value '%s'", 
+		debug("Using advanced filtering with tag field '%s' or search value '%s'",
 			options.TagField, options.SearchValue)
-			
+
 		// If dry run, simulate count for advanced filtering
 		if options.DryRun {
 			debug("Dry run, would process %d keys with advanced filtering", len(keysToDelete))
 			return len(keysToDelete), nil
 		}
-		
+
 		return s.bulkDeleteWithAdvancedFiltering(ctx, accountID, namespaceID, keys, options)
 	}
-	
+
 	// If dry run, return the count without deleting
 	if options.DryRun {
 		debug("Dry run, would delete %d keys", len(keysToDelete))
 		return len(keysToDelete), nil
 	}
-	
+
 	// If we have no keys to delete after all filtering, just return 0
 	if len(keysToDelete) == 0 {
 		debug("No keys to delete after filtering")
 		return 0, nil
 	}
-	
+
 	debug("Deleting %d keys", len(keysToDelete))
-	
+
 	// Define a progress callback for showing batch progress
 	var progressCallback func(completed, total int)
-	
+
 	// Only create callback in verbose mode
 	if options.Verbose {
 		progressCallback = func(completed, total int) {
@@ -321,7 +321,7 @@ func (s *CloudflareKVService) BulkDelete(ctx context.Context, accountID, namespa
 			debug("Progress: %d/%d keys deleted (%.1f%%)", completed, total, percent)
 		}
 	}
-	
+
 	// Delete the collected keys
 	if options.Concurrency > 0 {
 		// Use concurrent deletion for better performance
@@ -351,31 +351,31 @@ func (s *CloudflareKVService) bulkDeleteWithAdvancedFiltering(ctx context.Contex
 			fmt.Printf(format+"\n", args...)
 		}
 	}
-	
+
 	// Define a progress callback for showing batch progress in verbose mode
 	var progressCallback func(keysFetched, keysProcessed, keysMatched, keysDeleted, total int)
-	
+
 	// Only create callback in verbose mode
 	if options.Verbose {
 		progressCallback = func(keysFetched, keysProcessed, keysMatched, keysDeleted, total int) {
-			// Show detailed progress information 
+			// Show detailed progress information
 			if total > 0 {
 				fetchPercent := float64(keysFetched) / float64(total) * 100
 				procPercent := float64(keysProcessed) / float64(total) * 100
-				debug("Progress: %d/%d keys fetched (%.1f%%), %d/%d processed (%.1f%%), %d matched, %d deleted", 
+				debug("Progress: %d/%d keys fetched (%.1f%%), %d/%d processed (%.1f%%), %d matched, %d deleted",
 					keysFetched, total, fetchPercent, keysProcessed, total, procPercent, keysMatched, keysDeleted)
 			} else {
-				debug("Progress: %d keys fetched, %d processed, %d matched, %d deleted", 
+				debug("Progress: %d keys fetched, %d processed, %d matched, %d deleted",
 					keysFetched, keysProcessed, keysMatched, keysDeleted)
 			}
 		}
 	}
-	
+
 	// This will use the appropriate purge function based on the options
 	if options.SearchValue != "" {
 		debug("Using smart purge by value '%s'", options.SearchValue)
 		// Use smart purge by value
-		return SmartPurgeByValue(s.client, accountID, namespaceID, options.SearchValue, 
+		return SmartPurgeByValue(s.client, accountID, namespaceID, options.SearchValue,
 			options.BatchSize, options.Concurrency, options.DryRun, progressCallback)
 	} else if options.TagField != "" {
 		debug("Using tag-based purge with field '%s', value '%s'", options.TagField, options.TagValue)
@@ -383,7 +383,7 @@ func (s *CloudflareKVService) bulkDeleteWithAdvancedFiltering(ctx context.Contex
 		return PurgeByMetadataOnly(s.client, accountID, namespaceID, options.TagField, options.TagValue,
 			options.BatchSize, options.Concurrency, options.DryRun, progressCallback)
 	}
-	
+
 	// Shouldn't reach here but just in case
 	return 0, fmt.Errorf("invalid advanced filtering options")
 }
@@ -396,9 +396,9 @@ func (s *CloudflareKVService) Search(ctx context.Context, accountID, namespaceID
 			options.BatchSize, options.Concurrency, nil)
 	} else if options.TagField != "" {
 		// Use tag-based search
-		return StreamingFilterKeysByMetadata(s.client, accountID, namespaceID, options.TagField, 
+		return StreamingFilterKeysByMetadata(s.client, accountID, namespaceID, options.TagField,
 			options.TagValue, options.BatchSize, options.Concurrency, nil)
 	}
-	
+
 	return nil, fmt.Errorf("search requires either SearchValue or TagField to be specified")
 }

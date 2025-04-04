@@ -16,7 +16,7 @@ func init() {
 	kvCmd.AddCommand(cmdutil.NewKVCreateCommand().Build())
 	kvCmd.AddCommand(cmdutil.NewKVRenameCommand().Build())
 	kvCmd.AddCommand(cmdutil.NewKVConfigCommand().Build())
-	
+
 	// Note: The search functionality has been integrated into the list command
 	// and the delete command with the --search flag
 }

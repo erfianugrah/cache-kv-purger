@@ -17,22 +17,22 @@ import (
 func NewKVGetCommand() *CommandBuilder {
 	// Define flag variables
 	var opts struct {
-		accountID     string
-		namespaceID   string
-		namespace     string
-		key           string
-		bulk          bool
-		keys          string
-		prefix        string
-		pattern       string
-		searchValue   string
-		tagField      string
-		tagValue      string
-		metadata      bool
-		outputFile    string
-		outputJSON    bool
-		batchSize     int
-		concurrency   int
+		accountID   string
+		namespaceID string
+		namespace   string
+		key         string
+		bulk        bool
+		keys        string
+		prefix      string
+		pattern     string
+		searchValue string
+		tagField    string
+		tagValue    string
+		metadata    bool
+		outputFile  string
+		outputJSON  bool
+		batchSize   int
+		concurrency int
 	}
 
 	// Create command
@@ -115,7 +115,7 @@ When used with --bulk, gets multiple key values based on filters.
 			}
 
 			// If bulk mode, validate we have something to fetch
-			if opts.bulk && opts.keys == "" && opts.prefix == "" && opts.pattern == "" && 
+			if opts.bulk && opts.keys == "" && opts.prefix == "" && opts.pattern == "" &&
 				opts.searchValue == "" && opts.tagField == "" {
 				return fmt.Errorf("bulk mode requires at least one filter (--keys, --prefix, --pattern, --search, or --tag-field)")
 			}
@@ -142,11 +142,11 @@ When used with --bulk, gets multiple key values based on filters.
 				// Otherwise, use formatted output with the common formatter
 				data := make(map[string]string)
 				data["Key"] = key.Key
-				
+
 				if key.Expiration > 0 {
 					data["Expiration"] = fmt.Sprintf("%d", key.Expiration)
 				}
-				
+
 				// Add metadata if available
 				if key.Metadata != nil {
 					metaStr := ""
@@ -158,14 +158,14 @@ When used with --bulk, gets multiple key values based on filters.
 					}
 					data["Metadata"] = metaStr
 				}
-				
+
 				// Add the value
 				if len(key.Value) > 200 {
 					data["Value"] = fmt.Sprintf("(length: %d chars)\n%s", len(key.Value), key.Value)
 				} else {
 					data["Value"] = key.Value
 				}
-				
+
 				common.FormatKeyValueTable(data)
 				return nil
 			}
@@ -214,7 +214,7 @@ When used with --bulk, gets multiple key values based on filters.
 				}
 
 				// Now get the values for these keys
-				result, err = service.BulkGet(cmd.Context(), accountID, opts.namespaceID, 
+				result, err = service.BulkGet(cmd.Context(), accountID, opts.namespaceID,
 					extractKeys(matchingKeys), bulkGetOptions)
 				if err != nil {
 					return fmt.Errorf("failed to get values for search results: %w", err)
@@ -240,7 +240,7 @@ When used with --bulk, gets multiple key values based on filters.
 				}
 
 				// Now get the values for these keys
-				result, err = service.BulkGet(cmd.Context(), accountID, opts.namespaceID, 
+				result, err = service.BulkGet(cmd.Context(), accountID, opts.namespaceID,
 					extractKeys(listResult.Keys), bulkGetOptions)
 				if err != nil {
 					return fmt.Errorf("failed to get values for matching keys: %w", err)
@@ -263,16 +263,16 @@ When used with --bulk, gets multiple key values based on filters.
 
 			// Enhanced formatted output
 			fmt.Printf("Retrieved %d keys:\n\n", len(result))
-			
+
 			for i, kv := range result {
 				// Create a formatted key-value map for this entry
 				data := make(map[string]string)
 				data["Key"] = kv.Key
-				
+
 				if kv.Expiration > 0 {
 					data["Expiration"] = fmt.Sprintf("%d", kv.Expiration)
 				}
-				
+
 				// Format metadata nicely if available
 				if kv.Metadata != nil {
 					metaStr := ""
@@ -284,7 +284,7 @@ When used with --bulk, gets multiple key values based on filters.
 					}
 					data["Metadata"] = metaStr
 				}
-				
+
 				// Handle value (potentially truncate if very long)
 				valueDisplay := kv.Value
 				if len(valueDisplay) > 500 {
@@ -294,10 +294,10 @@ When used with --bulk, gets multiple key values based on filters.
 				} else {
 					data["Value"] = valueDisplay
 				}
-				
+
 				// Use the common formatter
 				common.FormatKeyValueTable(data)
-				
+
 				// Add separator between items if not the last one
 				if i < len(result)-1 {
 					fmt.Println()

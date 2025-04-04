@@ -48,7 +48,7 @@ https:// will be automatically added.`,
 			opts.dryRun, _ = cmd.Flags().GetBool("dry-run")
 			opts.verbose, _ = cmd.Flags().GetBool("verbose")
 
-			// Load config 
+			// Load config
 			cfg, err := config.LoadFromFile("")
 			if err != nil {
 				// Just use defaults if config fails to load
@@ -177,7 +177,7 @@ https:// will be automatically added.`,
 			data["Files Purged"] = fmt.Sprintf("%d", len(validFiles))
 			data["Purge ID"] = resp.Result.ID
 			data["Status"] = "Success"
-			
+
 			common.FormatKeyValueTable(data)
 			successCount++
 

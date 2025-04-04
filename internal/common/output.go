@@ -3,9 +3,9 @@ package common
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"text/tabwriter"
-	"os"
 	"unicode/utf8"
 )
 
@@ -31,24 +31,24 @@ func ToJSON(data interface{}) ([]byte, error) {
 func FormatTable(headers []string, rows [][]string) {
 	// Create a new tabwriter that writes to stdout
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
-	
+
 	// Write headers
 	fmt.Fprintln(w, strings.Join(headers, "\t"))
-	
+
 	// Calculate total width for the separator line
 	totalWidth := 0
 	for _, h := range headers {
 		totalWidth += utf8.RuneCountInString(h) + 3 // Add padding
 	}
-	
+
 	// Create separator line matching the width of the content
 	fmt.Fprintln(w, strings.Repeat("-", totalWidth))
-	
+
 	// Write rows
 	for _, row := range rows {
 		fmt.Fprintln(w, strings.Join(row, "\t"))
 	}
-	
+
 	// Flush the writer to ensure all content is written
 	w.Flush()
 }
@@ -56,7 +56,7 @@ func FormatTable(headers []string, rows [][]string) {
 // FormatKeyValueTable formats data as a 2-column key-value table
 func FormatKeyValueTable(data map[string]string) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
-	
+
 	// Find the longest key to determine separator width
 	maxKeyLength := 0
 	for key := range data {
@@ -64,20 +64,20 @@ func FormatKeyValueTable(data map[string]string) {
 			maxKeyLength = len(key)
 		}
 	}
-	
+
 	// Add some padding
 	separatorWidth := maxKeyLength + 20
-	
+
 	// Print separator
 	fmt.Fprintln(w, strings.Repeat("-", separatorWidth))
-	
+
 	// Print key-value pairs
 	for key, value := range data {
 		fmt.Fprintf(w, "%s\t%s\n", key, value)
 	}
-	
+
 	// Print separator
 	fmt.Fprintln(w, strings.Repeat("-", separatorWidth))
-	
+
 	w.Flush()
 }

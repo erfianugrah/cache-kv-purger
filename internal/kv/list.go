@@ -82,7 +82,7 @@ func ListKeysWithOptions(client *api.Client, accountID, namespaceID string, opti
 // ListAllKeysWithOptions lists all keys in a KV namespace, handling pagination automatically with custom options
 func ListAllKeysWithOptions(client *api.Client, accountID, namespaceID string, options *ListKeysOptions, progressCallback func(fetched, total int)) ([]KeyValuePair, error) {
 	var allKeys []KeyValuePair
-	
+
 	// Create options if not provided
 	if options == nil {
 		options = &ListKeysOptions{
@@ -91,15 +91,15 @@ func ListAllKeysWithOptions(client *api.Client, accountID, namespaceID string, o
 	} else if options.Limit == 0 {
 		options.Limit = 1000 // Ensure a reasonable default
 	}
-	
+
 	// Cloudflare API requires a minimum limit of 10
 	if options.Limit < 10 {
 		options.Limit = 10
 	}
-	
+
 	// Use a copy of options so we don't modify the original
 	requestOptions := *options
-	
+
 	totalFetched := 0
 
 	for {

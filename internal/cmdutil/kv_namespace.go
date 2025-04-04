@@ -15,10 +15,10 @@ import (
 func NewKVCreateCommand() *CommandBuilder {
 	// Define flag variables
 	var opts struct {
-		accountID     string
-		title         string
-		namespace     bool
-		outputJSON    bool
+		accountID  string
+		title      string
+		namespace  bool
+		outputJSON bool
 	}
 
 	// Create command
@@ -69,7 +69,7 @@ Create a KV namespace with the specified title.
 			data := make(map[string]string)
 			data["ID"] = ns.ID
 			data["Title"] = ns.Title
-			
+
 			fmt.Println("Successfully created namespace:")
 			common.FormatKeyValueTable(data)
 			return nil
@@ -81,11 +81,11 @@ Create a KV namespace with the specified title.
 func NewKVRenameCommand() *CommandBuilder {
 	// Define flag variables
 	var opts struct {
-		accountID     string
-		namespaceID   string
-		namespace     string
-		title         string
-		outputJSON    bool
+		accountID   string
+		namespaceID string
+		namespace   string
+		title       string
+		outputJSON  bool
 	}
 
 	// Create command
@@ -150,7 +150,7 @@ Rename a KV namespace to the specified title.
 			data := make(map[string]string)
 			data["ID"] = ns.ID
 			data["Title"] = ns.Title
-			
+
 			fmt.Println("Successfully renamed namespace:")
 			common.FormatKeyValueTable(data)
 			return nil

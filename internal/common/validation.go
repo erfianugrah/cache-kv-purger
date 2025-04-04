@@ -17,17 +17,17 @@ func ValidateAccountID(cmd *cobra.Command, cfg *config.Config, providedID ...str
 
 	// Next try to get from flag
 	accountID, _ := cmd.Flags().GetString("account-id")
-	
+
 	// If not in flag, try from config
 	if accountID == "" && cfg != nil {
 		accountID = cfg.GetAccountID()
 	}
-	
+
 	// If still not found, return error
 	if accountID == "" {
 		return "", fmt.Errorf("account ID is required, specify it with --account-id flag, CLOUDFLARE_ACCOUNT_ID environment variable, or set a default account in config")
 	}
-	
+
 	return accountID, nil
 }
 
@@ -35,7 +35,7 @@ func ValidateAccountID(cmd *cobra.Command, cfg *config.Config, providedID ...str
 func ValidateNamespaceID(cmd *cobra.Command, cfg *config.Config, client interface{}, accountID string) (string, error) {
 	// First try to get from flag
 	nsID, _ := cmd.Flags().GetString("namespace-id")
-	
+
 	// If not in flag, try title
 	if nsID == "" {
 		title, _ := cmd.Flags().GetString("title")
@@ -47,12 +47,12 @@ func ValidateNamespaceID(cmd *cobra.Command, cfg *config.Config, client interfac
 			if !ok {
 				return "", fmt.Errorf("invalid client for namespace resolution")
 			}
-			
+
 			ns, err := apiClient.FindNamespaceByTitle(accountID, title)
 			if err != nil {
 				return "", fmt.Errorf("failed to find namespace by title: %w", err)
 			}
-			
+
 			// Extract the ID based on the returned type
 			switch v := ns.(type) {
 			case map[string]interface{}:
@@ -66,12 +66,12 @@ func ValidateNamespaceID(cmd *cobra.Command, cfg *config.Config, client interfac
 			}
 		}
 	}
-	
+
 	// If still not found, return error
 	if nsID == "" {
 		return "", fmt.Errorf("namespace ID or title is required, specify with --namespace-id or --title flag")
 	}
-	
+
 	return nsID, nil
 }
 
@@ -80,17 +80,17 @@ func ValidateNamespaceID(cmd *cobra.Command, cfg *config.Config, client interfac
 func ValidateZoneID(cmd *cobra.Command, cfg *config.Config, client interface{}, accountID string) (string, error) {
 	// First try to get from flag
 	zoneID, _ := cmd.Flags().GetString("zone")
-	
+
 	// If not in flag, try from config
 	if zoneID == "" && cfg != nil {
 		zoneID = cfg.GetZoneID()
 	}
-	
+
 	// If still not found, return error
 	if zoneID == "" {
 		return "", fmt.Errorf("zone ID is required, specify it with --zone flag, CLOUDFLARE_ZONE_ID environment variable, or set a default zone in config")
 	}
-	
+
 	// If the client supports zone resolution, make sure we have the ID not the name
 	if resolver, ok := client.(interface {
 		ResolveZoneIdentifier(accountID, zone string) (string, error)
@@ -101,7 +101,7 @@ func ValidateZoneID(cmd *cobra.Command, cfg *config.Config, client interface{}, 
 		}
 		return resolvedID, nil
 	}
-	
+
 	// If no resolver available, just return the zone ID/name as is
 	return zoneID, nil
 }
@@ -184,7 +184,7 @@ func ResolveZoneIdentifiers(cmd *cobra.Command, client interface{}, accountID st
 	if zoneList != "" {
 		// Split by comma
 		zoneItems := strings.Split(zoneList, ",")
-		
+
 		resolver, ok := client.(interface {
 			ResolveZoneIdentifier(accountID, zone string) (string, error)
 		})

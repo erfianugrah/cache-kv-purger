@@ -18,24 +18,24 @@ import (
 func NewKVDeleteCommand() *CommandBuilder {
 	// Define flag variables
 	var opts struct {
-		accountID      string
-		namespaceID    string
-		namespace      string
-		key            string
+		accountID       string
+		namespaceID     string
+		namespace       string
+		key             string
 		namespaceItself bool
-		bulk           bool
-		keys           string
-		keysFile       string
-		prefix         string
-		pattern        string
-		searchValue    string
-		tagField       string
-		tagValue       string
-		allKeys        bool
-		dryRun         bool
-		force          bool
-		batchSize      int
-		concurrency    int
+		bulk            bool
+		keys            string
+		keysFile        string
+		prefix          string
+		pattern         string
+		searchValue     string
+		tagField        string
+		tagValue        string
+		allKeys         bool
+		dryRun          bool
+		force           bool
+		batchSize       int
+		concurrency     int
 	}
 
 	// Create command
@@ -147,11 +147,11 @@ When used with --bulk, deletes multiple keys based on filters.
 				if !opts.force {
 					fmt.Printf("You are about to delete the namespace '%s' (%s) and ALL of its keys. This action cannot be undone.\n", nsTitle, opts.namespaceID)
 					fmt.Print("Are you sure? (y/N): ")
-					
+
 					reader := bufio.NewReader(os.Stdin)
 					confirmation, _ := reader.ReadString('\n')
 					confirmation = strings.TrimSpace(strings.ToLower(confirmation))
-					
+
 					if confirmation != "y" && confirmation != "yes" {
 						fmt.Println("Deletion cancelled.")
 						return nil
@@ -184,11 +184,11 @@ When used with --bulk, deletes multiple keys based on filters.
 				if !opts.force {
 					fmt.Printf("You are about to delete the key '%s'. This action cannot be undone.\n", opts.key)
 					fmt.Print("Are you sure? (y/N): ")
-					
+
 					reader := bufio.NewReader(os.Stdin)
 					confirmation, _ := reader.ReadString('\n')
 					confirmation = strings.TrimSpace(strings.ToLower(confirmation))
-					
+
 					if confirmation != "y" && confirmation != "yes" {
 						fmt.Println("Deletion cancelled.")
 						return nil
@@ -212,7 +212,7 @@ When used with --bulk, deletes multiple keys based on filters.
 
 			// Bulk mode - get keys to delete
 			var keys []string
-			
+
 			// If explicit keys are provided
 			if opts.keys != "" {
 				keys = strings.Split(opts.keys, ",")
@@ -235,12 +235,12 @@ When used with --bulk, deletes multiple keys based on filters.
 			// Note: An empty prefix means match all keys when explicitly provided
 			prefixSpecified := opts.prefix != "" || cmd.Flags().Changed("prefix")
 			hasFilteringCriteria := prefixSpecified || opts.pattern != "" || opts.tagField != "" || opts.tagValue != "" || opts.searchValue != "" || opts.allKeys
-			
+
 			// Check for the enhanced "deep search" capability
 			if opts.searchValue != "" && opts.tagField == "" {
 				// This is a deep recursive metadata search (similar to the old search command)
 				// This is more powerful when you don't know the exact metadata structure
-				
+
 				// Use the service.Search directly
 				searchOptions := kv.SearchOptions{
 					SearchValue:     opts.searchValue,
@@ -248,7 +248,7 @@ When used with --bulk, deletes multiple keys based on filters.
 					BatchSize:       opts.batchSize,
 					Concurrency:     opts.concurrency,
 				}
-				
+
 				// Find matching keys first
 				matchingKeys, err := service.Search(cmd.Context(), accountID, opts.namespaceID, searchOptions)
 				if err != nil {
@@ -265,43 +265,43 @@ When used with --bulk, deletes multiple keys based on filters.
 				for i, key := range matchingKeys {
 					keyNames[i] = key.Key
 				}
-				
+
 				// Confirm deletion unless --force is used
 				if !opts.force {
 					fmt.Printf("Found %d keys matching '%s'.\n", len(keyNames), opts.searchValue)
 					fmt.Println("Sample matched keys:")
-					
+
 					// Show the first few keys as samples
 					sampleSize := 5
 					if len(keyNames) < sampleSize {
 						sampleSize = len(keyNames)
 					}
-					
+
 					for i := 0; i < sampleSize; i++ {
 						fmt.Printf("  - %s\n", keyNames[i])
 					}
-					
+
 					if len(keyNames) > sampleSize {
-						fmt.Printf("  - ... and %d more\n", len(keyNames) - sampleSize)
+						fmt.Printf("  - ... and %d more\n", len(keyNames)-sampleSize)
 					}
-					
+
 					fmt.Print("\nAre you sure you want to delete these keys? This action cannot be undone. [y/N]: ")
-					
+
 					reader := bufio.NewReader(os.Stdin)
 					confirmation, _ := reader.ReadString('\n')
 					confirmation = strings.TrimSpace(strings.ToLower(confirmation))
-					
+
 					if confirmation != "y" && confirmation != "yes" {
 						fmt.Println("Deletion cancelled.")
 						return nil
 					}
 				}
-				
+
 				if opts.dryRun {
 					fmt.Printf("DRY RUN: Would delete %d keys matching '%s'.\n", len(keyNames), opts.searchValue)
 					return nil
 				}
-				
+
 				// Delete the keys
 				deleteOptions := kv.BulkDeleteOptions{
 					BatchSize:   opts.batchSize,
@@ -309,35 +309,35 @@ When used with --bulk, deletes multiple keys based on filters.
 					DryRun:      false, // We handle dry run above
 					Force:       true,  // We already confirmed
 				}
-				
+
 				count, err := service.BulkDelete(cmd.Context(), accountID, opts.namespaceID, keyNames, deleteOptions)
 				if err != nil {
 					return fmt.Errorf("bulk delete operation failed: %w", err)
 				}
-				
+
 				fmt.Printf("Successfully deleted %d/%d keys matching '%s'\n", count, len(keyNames), opts.searchValue)
 				return nil
 			}
 
 			// Regular bulk delete with options
-			// prefixSpecified was already defined above, reuse it 
-				
+			// prefixSpecified was already defined above, reuse it
+
 			// Get the verbose flag
 			verbose, _ := cmd.Flags().GetBool("verbose")
-			
+
 			bulkDeleteOptions := kv.BulkDeleteOptions{
-				BatchSize:         opts.batchSize,
-				Concurrency:       opts.concurrency,
-				DryRun:            opts.dryRun,
-				Force:             opts.force,
-				Verbose:           verbose,
-				Prefix:            opts.prefix,
-				PrefixSpecified:   prefixSpecified,
-				AllKeys:           opts.allKeys,
-				Pattern:           opts.pattern,
-				TagField:          opts.tagField,
-				TagValue:          opts.tagValue,
-				SearchValue:       opts.searchValue, // This is less powerful than the deep search above
+				BatchSize:       opts.batchSize,
+				Concurrency:     opts.concurrency,
+				DryRun:          opts.dryRun,
+				Force:           opts.force,
+				Verbose:         verbose,
+				Prefix:          opts.prefix,
+				PrefixSpecified: prefixSpecified,
+				AllKeys:         opts.allKeys,
+				Pattern:         opts.pattern,
+				TagField:        opts.tagField,
+				TagValue:        opts.tagValue,
+				SearchValue:     opts.searchValue, // This is less powerful than the deep search above
 			}
 
 			// If we have filtering criteria but no explicit keys
@@ -362,11 +362,11 @@ When used with --bulk, deletes multiple keys based on filters.
 				if !opts.force {
 					fmt.Printf("You are about to delete %d keys. This action cannot be undone.\n", len(keys))
 					fmt.Print("Are you sure? (y/N): ")
-					
+
 					reader := bufio.NewReader(os.Stdin)
 					confirmation, _ := reader.ReadString('\n')
 					confirmation = strings.TrimSpace(strings.ToLower(confirmation))
-					
+
 					if confirmation != "y" && confirmation != "yes" {
 						fmt.Println("Deletion cancelled.")
 						return nil

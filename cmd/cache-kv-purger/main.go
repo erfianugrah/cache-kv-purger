@@ -29,13 +29,13 @@ func setupCommandValidation(cmd *cobra.Command) {
 	// Store original function to create our validator
 	original := cmd.PersistentPreRunE
 	originalHelp := cmd.HelpFunc()
-	
+
 	// Replace the help function to prioritize it over everything else
 	cmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
 		// Use the original help function
 		originalHelp(cmd, args)
 	})
-	
+
 	// Add our validator that prioritizes help
 	cmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 		// Check if --help is present anywhere in the arguments
@@ -45,14 +45,14 @@ func setupCommandValidation(cmd *cobra.Command) {
 				os.Exit(0)
 			}
 		}
-		
+
 		// Continue with original pre-run if it exists
 		if original != nil {
 			return original(cmd, args)
 		}
 		return nil
 	}
-	
+
 	// Add validation to all command's flags
 	cmd.Flags().VisitAll(func(flag *pflag.Flag) {
 		// For string flags that should have values, add validation
@@ -61,7 +61,7 @@ func setupCommandValidation(cmd *cobra.Command) {
 			flag.Usage += " (requires a value)"
 		}
 	})
-	
+
 	// Recurse into subcommands
 	for _, subCmd := range cmd.Commands() {
 		setupCommandValidation(subCmd)
@@ -73,10 +73,10 @@ func main() {
 	// Add validation to all commands
 	// Import pflag for the validation
 	_ = os.Args // Force import of os to avoid issues
-	
+
 	// Apply validation to all commands
 	setupCommandValidation(rootCmd)
-	
+
 	// Execute the root command
 	if err := rootCmd.Execute(); err != nil {
 		// Skip error output for --help requests

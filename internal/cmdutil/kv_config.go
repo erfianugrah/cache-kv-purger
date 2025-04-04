@@ -13,8 +13,8 @@ import (
 func NewKVConfigCommand() *CommandBuilder {
 	// Define flag variables
 	var opts struct {
-		accountID     string
-		show          bool
+		accountID string
+		show      bool
 	}
 
 	// Create command
@@ -45,7 +45,7 @@ When used with --show, displays the current configuration.
 				// Use key-value table for configuration display
 				data := make(map[string]string)
 				data["Default Account ID"] = cfg.AccountID
-				
+
 				fmt.Println("KV Configuration:")
 				common.FormatKeyValueTable(data)
 				return nil
@@ -57,12 +57,12 @@ When used with --show, displays the current configuration.
 				if err := cfg.SaveToFile(""); err != nil {
 					return fmt.Errorf("failed to save config: %w", err)
 				}
-				
+
 				// Format the success message with key-value table
 				data := make(map[string]string)
 				data["Default Account ID"] = opts.accountID
 				data["Status"] = "Updated successfully"
-				
+
 				common.FormatKeyValueTable(data)
 				return nil
 			}

@@ -39,7 +39,7 @@ func registerLegacyKVCommands(kvCmd *cobra.Command) {
 		Long:       "Manage KV namespaces - deprecated, use verb commands directly",
 		Deprecated: "Use 'kv list', 'kv create', 'kv delete', etc. instead",
 	}
-	
+
 	// List namespace legacy command
 	nsCmd.AddCommand(&cobra.Command{
 		Use:        "list",
@@ -62,7 +62,7 @@ func registerLegacyKVCommands(kvCmd *cobra.Command) {
 		Long:       "Manage KV key-values - deprecated, use verb commands directly",
 		Deprecated: "Use 'kv list', 'kv get', 'kv put', 'kv delete' instead",
 	}
-	
+
 	// List values legacy command
 	valuesCmd.AddCommand(&cobra.Command{
 		Use:        "list",

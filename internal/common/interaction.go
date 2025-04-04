@@ -27,7 +27,7 @@ func DisplayItemSample(items []interface{}, verbose bool, itemFormatter func(int
 	}
 
 	fmt.Printf("Found %d items\n", len(items))
-	
+
 	if verbose {
 		// Show all items in verbose mode
 		for i, item := range items {
@@ -39,18 +39,18 @@ func DisplayItemSample(items []interface{}, verbose bool, itemFormatter func(int
 		if len(items) < displayCount {
 			displayCount = len(items)
 		}
-		
+
 		for i := 0; i < displayCount; i++ {
 			fmt.Printf("  %d. %s\n", i+1, itemFormatter(items[i]))
 		}
-		
+
 		if len(items) > displayCount {
 			fmt.Printf("  ... and %d more items\n", len(items)-displayCount)
 		}
 	}
 }
 
-// StringsDisplaySample shows a sample of string items 
+// StringsDisplaySample shows a sample of string items
 func StringsDisplaySample(items []string, verbose bool) {
 	if len(items) == 0 {
 		fmt.Println("No items found")
@@ -58,7 +58,7 @@ func StringsDisplaySample(items []string, verbose bool) {
 	}
 
 	fmt.Printf("Found %d items\n", len(items))
-	
+
 	if verbose {
 		// Show all items in verbose mode
 		for i, item := range items {
@@ -70,11 +70,11 @@ func StringsDisplaySample(items []string, verbose bool) {
 		if len(items) < displayCount {
 			displayCount = len(items)
 		}
-		
+
 		for i := 0; i < displayCount; i++ {
 			fmt.Printf("  %d. %s\n", i+1, items[i])
 		}
-		
+
 		if len(items) > displayCount {
 			fmt.Printf("  ... and %d more items\n", len(items)-displayCount)
 		}

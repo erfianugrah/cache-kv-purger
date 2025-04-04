@@ -163,7 +163,7 @@ When used with --bulk and --bulk-file, puts multiple key values from a file.
 				} else if opts.expirationTTL > 0 {
 					data["Expiration TTL"] = fmt.Sprintf("%d seconds", opts.expirationTTL)
 				}
-				
+
 				common.FormatKeyValueTable(data)
 				return nil
 			}
@@ -204,7 +204,7 @@ When used with --bulk and --bulk-file, puts multiple key values from a file.
 			if opts.batchSize > 0 {
 				data["Batch Size"] = fmt.Sprintf("%d items", opts.batchSize)
 			}
-			
+
 			common.FormatKeyValueTable(data)
 			return nil
 		}),
