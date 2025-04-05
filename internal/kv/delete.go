@@ -58,7 +58,7 @@ func DeleteMultipleValues(client *api.Client, accountID, namespaceID string, key
 		return fmt.Errorf("at least one key is required")
 	}
 
-	path := fmt.Sprintf("/accounts/%s/storage/kv/namespaces/%s/bulk", accountID, namespaceID)
+	path := fmt.Sprintf("/accounts/%s/storage/kv/namespaces/%s/bulk/delete", accountID, namespaceID)
 
 	// API expects an array of objects with 'name' property
 	keyObjects := make([]KeyName, len(keys))
@@ -66,7 +66,7 @@ func DeleteMultipleValues(client *api.Client, accountID, namespaceID string, key
 		keyObjects[i] = KeyName{Name: key}
 	}
 
-	respBody, err := client.Request(http.MethodDelete, path, nil, keyObjects)
+	respBody, err := client.Request(http.MethodPost, path, nil, keyObjects)
 	if err != nil {
 		// Fall back to individual deletions if bulk delete fails
 		fallbackErrors := 0

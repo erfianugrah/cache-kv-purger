@@ -19,7 +19,7 @@ and KV store manipulation.`,
 
 func init() {
 	// Add global flags
-	rootCmd.PersistentFlags().Bool("verbose", false, "Enable verbose output")
+	rootCmd.PersistentFlags().String("verbosity", "normal", "Verbosity level: quiet, normal, verbose, debug")
 	rootCmd.PersistentFlags().StringP("zone", "z", "", "Cloudflare Zone ID or domain name (required for most commands)")
 }
 

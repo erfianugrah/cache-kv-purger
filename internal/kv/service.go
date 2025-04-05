@@ -74,6 +74,7 @@ type BulkDeleteOptions struct {
 	DryRun          bool
 	Force           bool
 	Verbose         bool // Enable verbose output
+	Debug           bool // Enable debug output (more detailed than verbose)
 	Prefix          string
 	PrefixSpecified bool // Whether prefix was explicitly specified, even if empty
 	AllKeys         bool // Whether to delete all keys in the namespace
@@ -234,11 +235,18 @@ func (s *CloudflareKVService) BulkPut(ctx context.Context, accountID, namespaceI
 
 // BulkDelete deletes multiple values in bulk
 func (s *CloudflareKVService) BulkDelete(ctx context.Context, accountID, namespaceID string, keys []string, options BulkDeleteOptions) (int, error) {
-	// Define a debug function that respects the verbose flag from options
-	debug := func(format string, args ...interface{}) {
-		// Only print debug information in verbose mode
+	// Define debug functions that respect verbosity flags
+	verbose := func(format string, args ...interface{}) {
+		// Print verbose information in verbose mode
 		if options.Verbose {
-			fmt.Printf(format+"\n", args...)
+			fmt.Printf("[VERBOSE] "+format+"\n", args...)
+		}
+	}
+	
+	debug := func(format string, args ...interface{}) {
+		// Only print debug information in debug mode
+		if options.Debug {
+			fmt.Printf("[DEBUG] "+format+"\n", args...)
 		}
 	}
 	// Handle filtering first to get an accurate count for dry run
@@ -271,7 +279,8 @@ func (s *CloudflareKVService) BulkDelete(ctx context.Context, accountID, namespa
 				return 0, fmt.Errorf("failed to list keys: %w", err)
 			}
 
-			debug("Found %d keys matching criteria", len(allKeys))
+			verbose("Found %d keys matching criteria", len(allKeys))
+			debug("Matched keys count: %d, proceeding with deletion", len(allKeys))
 
 			// Extract key names
 			keysToDelete = make([]string, len(allKeys))
@@ -279,18 +288,22 @@ func (s *CloudflareKVService) BulkDelete(ctx context.Context, accountID, namespa
 				keysToDelete[i] = key.Key
 			}
 		} else {
-			debug("No keys or filtering criteria provided")
+			verbose("No keys or filtering criteria provided")
+			debug("Empty criteria, no keys to process")
 		}
 	}
 
 	// If we have tag-based filtering or search, use the appropriate functions
 	if options.TagField != "" || options.SearchValue != "" {
-		debug("Using advanced filtering with tag field '%s' or search value '%s'",
+		verbose("Using advanced filtering with tag field '%s' or search value '%s'",
+			options.TagField, options.SearchValue)
+		debug("Starting advanced filtering process with field='%s', value='%s'", 
 			options.TagField, options.SearchValue)
 
 		// If dry run, simulate count for advanced filtering
 		if options.DryRun {
-			debug("Dry run, would process %d keys with advanced filtering", len(keysToDelete))
+			verbose("Dry run, would process %d keys with advanced filtering", len(keysToDelete))
+			debug("Dry run mode, skipping actual deletion for %d keys", len(keysToDelete))
 			return len(keysToDelete), nil
 		}
 
@@ -299,17 +312,20 @@ func (s *CloudflareKVService) BulkDelete(ctx context.Context, accountID, namespa
 
 	// If dry run, return the count without deleting
 	if options.DryRun {
-		debug("Dry run, would delete %d keys", len(keysToDelete))
+		verbose("Dry run, would delete %d keys", len(keysToDelete))
+		debug("Dry run mode active, skipping actual deletion")
 		return len(keysToDelete), nil
 	}
 
 	// If we have no keys to delete after all filtering, just return 0
 	if len(keysToDelete) == 0 {
-		debug("No keys to delete after filtering")
+		verbose("No keys to delete after filtering")
+		debug("Filter result: 0 keys matched criteria")
 		return 0, nil
 	}
 
-	debug("Deleting %d keys", len(keysToDelete))
+	verbose("Deleting %d keys", len(keysToDelete))
+	debug("Starting deletion process for %d keys", len(keysToDelete))
 
 	// Define a progress callback for showing batch progress
 	var progressCallback func(completed, total int)
@@ -318,14 +334,16 @@ func (s *CloudflareKVService) BulkDelete(ctx context.Context, accountID, namespa
 	if options.Verbose {
 		progressCallback = func(completed, total int) {
 			percent := float64(completed) / float64(total) * 100
-			debug("Progress: %d/%d keys deleted (%.1f%%)", completed, total, percent)
+			verbose("Progress: %d/%d keys deleted (%.1f%%)", completed, total, percent)
+			debug("Batch deletion progress: %d/%d (%.1f%%)", completed, total, percent)
 		}
 	}
 
 	// Delete the collected keys
 	if options.Concurrency > 0 {
 		// Use concurrent deletion for better performance
-		debug("Using concurrent deletion with %d workers", options.Concurrency)
+		verbose("Using concurrent deletion with %d workers", options.Concurrency)
+		debug("Initializing concurrent deletion with %d workers, batch size %d", options.Concurrency, options.BatchSize)
 		successCount, errs := DeleteMultipleValuesConcurrently(s.client, accountID, namespaceID, keysToDelete, options.BatchSize, options.Concurrency, progressCallback)
 		if len(errs) > 0 {
 			return successCount, errs[0] // Return the first error encountered
@@ -333,7 +351,8 @@ func (s *CloudflareKVService) BulkDelete(ctx context.Context, accountID, namespa
 		return successCount, nil
 	} else {
 		// Fall back to sequential deletion
-		debug("Using sequential deletion")
+		verbose("Using sequential deletion")
+		debug("Initializing sequential deletion with batch size %d", options.BatchSize)
 		err := DeleteMultipleValuesInBatches(s.client, accountID, namespaceID, keysToDelete, options.BatchSize, progressCallback)
 		if err != nil {
 			return 0, err
@@ -344,11 +363,18 @@ func (s *CloudflareKVService) BulkDelete(ctx context.Context, accountID, namespa
 
 // bulkDeleteWithAdvancedFiltering handles complex delete operations with filtering
 func (s *CloudflareKVService) bulkDeleteWithAdvancedFiltering(ctx context.Context, accountID, namespaceID string, keys []string, options BulkDeleteOptions) (int, error) {
-	// Define a debug function that respects the verbose flag from options
-	debug := func(format string, args ...interface{}) {
-		// Only print debug information in verbose mode
+	// Define debug functions that respect verbosity flags
+	verbose := func(format string, args ...interface{}) {
+		// Print verbose information in verbose mode
 		if options.Verbose {
-			fmt.Printf(format+"\n", args...)
+			fmt.Printf("[VERBOSE] "+format+"\n", args...)
+		}
+	}
+	
+	debug := func(format string, args ...interface{}) {
+		// Only print debug information in debug mode
+		if options.Debug {
+			fmt.Printf("[DEBUG] "+format+"\n", args...)
 		}
 	}
 
@@ -373,12 +399,14 @@ func (s *CloudflareKVService) bulkDeleteWithAdvancedFiltering(ctx context.Contex
 
 	// This will use the appropriate purge function based on the options
 	if options.SearchValue != "" {
-		debug("Using smart purge by value '%s'", options.SearchValue)
+		verbose("Using smart purge by value '%s'", options.SearchValue)
+		debug("Starting smart purge operation with search value '%s'", options.SearchValue)
 		// Use smart purge by value
 		return SmartPurgeByValue(s.client, accountID, namespaceID, options.SearchValue,
 			options.BatchSize, options.Concurrency, options.DryRun, progressCallback)
 	} else if options.TagField != "" {
-		debug("Using tag-based purge with field '%s', value '%s'", options.TagField, options.TagValue)
+		verbose("Using tag-based purge with field '%s', value '%s'", options.TagField, options.TagValue)
+		debug("Starting tag-based purge with metadata field '%s', value '%s'", options.TagField, options.TagValue)
 		// Use tag-based purge
 		return PurgeByMetadataOnly(s.client, accountID, namespaceID, options.TagField, options.TagValue,
 			options.BatchSize, options.Concurrency, options.DryRun, progressCallback)

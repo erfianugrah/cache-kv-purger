@@ -303,11 +303,30 @@ When used with --bulk, deletes multiple keys based on filters.
 				}
 
 				// Delete the keys
+				// Get verbosity flags
+				verbosityStr, _ := cmd.Flags().GetString("verbosity")
+				verbose := false
+				debug := false
+
+				switch verbosityStr {
+				case "quiet":
+					// No output
+				case "verbose":
+					verbose = true
+				case "debug":
+					verbose = true
+					debug = true
+				default:
+					// Normal mode
+				}
+
 				deleteOptions := kv.BulkDeleteOptions{
 					BatchSize:   opts.batchSize,
 					Concurrency: opts.concurrency,
 					DryRun:      false, // We handle dry run above
 					Force:       true,  // We already confirmed
+					Verbose:     verbose,
+					Debug:       debug,
 				}
 
 				count, err := service.BulkDelete(cmd.Context(), accountID, opts.namespaceID, keyNames, deleteOptions)
@@ -322,8 +341,22 @@ When used with --bulk, deletes multiple keys based on filters.
 			// Regular bulk delete with options
 			// prefixSpecified was already defined above, reuse it
 
-			// Get the verbose flag
-			verbose, _ := cmd.Flags().GetBool("verbose")
+			// Get verbosity flags
+			verbosityStr, _ := cmd.Flags().GetString("verbosity")
+			verbose := false
+			debug := false
+
+			switch verbosityStr {
+			case "quiet":
+				// No output
+			case "verbose":
+				verbose = true
+			case "debug":
+				verbose = true
+				debug = true
+			default:
+				// Normal mode
+			}
 
 			bulkDeleteOptions := kv.BulkDeleteOptions{
 				BatchSize:       opts.batchSize,
@@ -331,6 +364,7 @@ When used with --bulk, deletes multiple keys based on filters.
 				DryRun:          opts.dryRun,
 				Force:           opts.force,
 				Verbose:         verbose,
+				Debug:           debug,
 				Prefix:          opts.prefix,
 				PrefixSpecified: prefixSpecified,
 				AllKeys:         opts.allKeys,

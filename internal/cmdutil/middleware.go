@@ -51,9 +51,22 @@ func WithConfigAndClient(fn func(*cobra.Command, []string, *config.Config, *api.
 }
 
 // WithVerbose adds a verbose flag extractor to simplify checking verbose mode
-func WithVerbose(fn func(*cobra.Command, []string, bool) error) func(*cobra.Command, []string) error {
+func WithVerbose(fn func(*cobra.Command, []string, bool, bool) error) func(*cobra.Command, []string) error {
 	return func(cmd *cobra.Command, args []string) error {
-		verbose, _ := cmd.Flags().GetBool("verbose")
-		return fn(cmd, args, verbose)
+		verbosityStr, _ := cmd.Flags().GetString("verbosity")
+		verbose := false
+		debug := false
+
+		switch verbosityStr {
+		case "quiet":
+			// No output
+		case "verbose":
+			verbose = true
+		case "debug":
+			verbose = true
+			debug = true
+		}
+
+		return fn(cmd, args, verbose, debug)
 	}
 }

@@ -14,7 +14,7 @@ func WriteMultipleValuesInBatches(client *api.Client, accountID, namespaceID str
 	}
 
 	if batchSize <= 0 {
-		batchSize = 1000 // Default batch size
+		batchSize = 10000 // Maximum batch size supported by API
 	} else if batchSize > 10000 {
 		batchSize = 10000 // Max batch size supported by API
 	}
@@ -58,17 +58,17 @@ func WriteMultipleValuesConcurrently(client *api.Client, accountID, namespaceID 
 	}
 
 	if batchSize <= 0 {
-		batchSize = 100 // Default batch size - Cloudflare's recommended size
+		batchSize = 10000 // Maximum batch size supported by API
 	} else if batchSize > 10000 {
 		batchSize = 10000 // Max batch size supported by API
 	}
 
 	// Set reasonable concurrency
 	if concurrency <= 0 {
-		concurrency = 10 // Default concurrency
+		concurrency = 20 // Default concurrency
 	}
-	if concurrency > 50 {
-		concurrency = 50 // Cap concurrency to avoid overwhelming API
+	if concurrency > 100 {
+		concurrency = 100 // Cap concurrency to avoid overwhelming API
 	}
 
 	// Simple progress reporting if none provided
@@ -210,7 +210,7 @@ func DeleteMultipleValuesInBatches(client *api.Client, accountID, namespaceID st
 	}
 
 	if batchSize <= 0 {
-		batchSize = 1000 // Default batch size
+		batchSize = 10000 // Maximum batch size supported by API
 	}
 
 	totalItems := len(keys)
@@ -247,15 +247,15 @@ func DeleteMultipleValuesConcurrently(client *api.Client, accountID, namespaceID
 	}
 
 	if batchSize <= 0 {
-		batchSize = 1000 // Default batch size
+		batchSize = 10000 // Maximum batch size supported by API
 	}
 
 	// Set reasonable concurrency
 	if concurrency <= 0 {
-		concurrency = 10 // Default concurrency
+		concurrency = 20 // Default concurrency
 	}
-	if concurrency > 50 {
-		concurrency = 50 // Cap concurrency to avoid overwhelming API
+	if concurrency > 100 {
+		concurrency = 100 // Cap concurrency to avoid overwhelming API
 	}
 
 	// Simple progress reporting if none provided
