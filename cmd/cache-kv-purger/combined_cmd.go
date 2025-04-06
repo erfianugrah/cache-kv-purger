@@ -29,8 +29,11 @@ This powerful command combines the KV search capabilities with cache purging to:
 1. Find and delete KV keys matching specific criteria
 2. Purge associated cache tags in the same operation
 `,
-	Example: `  # Purge KV keys with a specific search value and automatically use it as cache tag
+	Example: `  # Purge KV keys with a specific search value and auto-extract matching cache tags
   cache-kv-purger sync purge --namespace-id YOUR_NAMESPACE_ID --search "product-123" --zone example.com
+
+  # Purge KV keys with a search value and common derived cache tags 
+  cache-kv-purger sync purge --namespace-id YOUR_NAMESPACE_ID --search "product-123" --zone example.com --derived-tags
 
   # Purge KV keys with a specific search value and different cache tag
   cache-kv-purger sync purge --namespace-id YOUR_NAMESPACE_ID --search "product-123" --zone example.com --cache-tag product-images
@@ -57,6 +60,8 @@ This powerful command combines the KV search capabilities with cache purging to:
 		batchSize, _ := cmd.Flags().GetInt("batch-size")
 		concurrency, _ := cmd.Flags().GetInt("concurrency")
 		verbosity, _ := cmd.Flags().GetString("verbosity")
+		derivedTags, _ := cmd.Flags().GetBool("derived-tags")
+		extractTags, _ := cmd.Flags().GetBool("extract-tags")
 		
 		// Set verbosity levels based on the verbosity flag
 		verbose := verbosity == "verbose" || verbosity == "debug"
@@ -65,19 +70,6 @@ This powerful command combines the KV search capabilities with cache purging to:
 		// Validate inputs
 		if (searchValue == "" && tagField == "") || (namespaceID == "" && namespace == "") {
 			return fmt.Errorf("either search or tag-field, and either namespace-id or namespace are required")
-		}
-
-		// If no cache tags specified but search value exists, use search value as cache tag
-		if len(cacheTags) == 0 {
-			if searchValue != "" {
-				cacheTags = []string{searchValue}
-				fmt.Printf("Using search value '%s' as cache tag\n", searchValue)
-			} else if tagValue != "" {
-				cacheTags = []string{tagValue}
-				fmt.Printf("Using tag value '%s' as cache tag\n", tagValue)
-			} else {
-				return fmt.Errorf("at least one cache-tag is required when no search value or tag value is provided")
-			}
 		}
 
 		// Load config and fallback values
@@ -144,6 +136,114 @@ This powerful command combines the KV search capabilities with cache purging to:
 
 			if len(keyNames) > maxDisplay {
 				fmt.Printf("  ...and %d more\n", len(keyNames)-maxDisplay)
+			}
+		}
+
+		// If no cache tags specified, try to extract or generate tags
+		if len(cacheTags) == 0 {
+			// Priority order for tag generation:
+			// 1. Explicitly provided cache tags
+			// 2. Extract from key metadata if extract-tags is true
+			// 3. Generate common specific tags if derived-tags is true
+			// 4. Use exact search/tag value as fallback
+			
+			// Extract actual cache tags from KV metadata
+			if extractTags && len(matchingKeys) > 0 {
+				tagMap := make(map[string]bool)
+				
+				// Look for cache tags in the metadata
+				for _, key := range matchingKeys {
+					if key.Metadata != nil {
+						// Check for cache-tag field in metadata
+						if cacheTag, ok := (*key.Metadata)["cache-tag"]; ok {
+							// If it's a string, add it directly
+							if tagStr, isString := cacheTag.(string); isString {
+								tagMap[tagStr] = true
+							}
+						}
+						
+						// Some implementations store as cache-tags (plural)
+						if cacheTags, ok := (*key.Metadata)["cache-tags"]; ok {
+							// If it's a string, split by commas (common format)
+							if tagsStr, isString := cacheTags.(string); isString {
+								for _, tag := range strings.Split(tagsStr, ",") {
+									trimmed := strings.TrimSpace(tag)
+									if trimmed != "" {
+										tagMap[trimmed] = true
+									}
+								}
+							}
+						}
+						
+						// Some store it as an array of tags
+						if tags, ok := (*key.Metadata)["tags"]; ok {
+							// If it's a string, split by commas
+							if tagsStr, isString := tags.(string); isString {
+								for _, tag := range strings.Split(tagsStr, ",") {
+									trimmed := strings.TrimSpace(tag)
+									if trimmed != "" {
+										tagMap[trimmed] = true
+									}
+								}
+							} else if tagsArray, isArray := tags.([]interface{}); isArray {
+								// If it's an array, convert each element
+								for _, tag := range tagsArray {
+									if tagStr, isString := tag.(string); isString {
+										tagMap[tagStr] = true
+									}
+								}
+							}
+						}
+					}
+				}
+				
+				// Convert extracted tags to slice
+				if len(tagMap) > 0 {
+					for tag := range tagMap {
+						cacheTags = append(cacheTags, tag)
+					}
+					fmt.Printf("Extracted %d actual cache tags from KV metadata: %s\n", 
+						len(cacheTags), strings.Join(cacheTags, ", "))
+				} else if verbose {
+					fmt.Println("No cache tags found in KV metadata")
+				}
+			}
+			
+			// If no tags extracted but derived-tags requested, generate common specific tags
+			if len(cacheTags) == 0 && derivedTags {
+				if searchValue != "" {
+					// Common specific tag formats (no wildcards - Cloudflare doesn't support wildcards)
+					patterns := []string{
+						searchValue, // Base tag itself
+						fmt.Sprintf("%s-type-image", searchValue),
+						fmt.Sprintf("%s-type-file", searchValue),
+						fmt.Sprintf("%s-file", searchValue),
+						fmt.Sprintf("%s-path", searchValue),
+					}
+					cacheTags = patterns
+					fmt.Printf("Using common cache tags: %s\n", strings.Join(cacheTags, ", "))
+				} else if tagValue != "" {
+					patterns := []string{
+						tagValue, // Base tag itself
+						fmt.Sprintf("%s-type-image", tagValue),
+						fmt.Sprintf("%s-file", tagValue),
+					}
+					cacheTags = patterns
+					fmt.Printf("Using common cache tags: %s\n", strings.Join(cacheTags, ", "))
+				}
+			}
+			
+			// Fallback to using exact search/tag value if no other tags specified
+			if len(cacheTags) == 0 {
+				if searchValue != "" {
+					cacheTags = []string{searchValue}
+					fmt.Printf("Using search value '%s' as cache tag\n", searchValue)
+				} else if tagValue != "" {
+					cacheTags = []string{tagValue}
+					fmt.Printf("Using tag value '%s' as cache tag\n", tagValue)
+				} else {
+					return fmt.Errorf("at least one cache-tag is required when no search value or tag value is provided")
+				}
 			}
 		}
 
@@ -265,6 +365,10 @@ func init() {
 	syncPurgeCmd.Flags().String("tag-value", "", "Value to match in the tag field")
 	syncPurgeCmd.Flags().String("zone", "", "Zone ID or name to purge content from")
 	syncPurgeCmd.Flags().StringSlice("cache-tag", []string{}, "Cache tags to purge (can specify multiple times, optional if search/tag-value is provided)")
+	
+	// Cache tag generation options
+	syncPurgeCmd.Flags().Bool("derived-tags", false, "Generate common cache tag patterns from search/tag values")
+	syncPurgeCmd.Flags().Bool("extract-tags", true, "Extract cache tags from matching key metadata")
 
 	// Operation options
 	syncPurgeCmd.Flags().Bool("dry-run", false, "Show what would be done without making changes")
