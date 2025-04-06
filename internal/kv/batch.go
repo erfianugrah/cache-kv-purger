@@ -285,6 +285,9 @@ func DeleteMultipleValuesConcurrently(client *api.Client, accountID, namespaceID
 		})
 	}
 
+	// Verbose logging about how many batches we're creating
+	fmt.Printf("[DEBUG] Created %d batches for %d keys with batch size %d\n", len(batches), totalItems, batchSize)
+
 	// Create a result channel for completed batches
 	type batchResult struct {
 		batchIndex int
@@ -306,11 +309,14 @@ func DeleteMultipleValuesConcurrently(client *api.Client, accountID, namespaceID
 		go func(b batchWork) {
 			defer func() { <-sem }() // Release semaphore when done
 
+			fmt.Printf("[VERBOSE] Processing batch %d with %d keys\n", b.batchIndex+1, len(b.batchItems))
+			
 			// Delete this batch
 			err := DeleteMultipleValues(client, accountID, namespaceID, b.batchItems)
 
 			// Send result back through channel
 			if err != nil {
+				fmt.Printf("[ERROR] Batch %d failed: %v\n", b.batchIndex+1, err)
 				resultChan <- batchResult{
 					batchIndex: b.batchIndex,
 					success:    false,
@@ -319,6 +325,7 @@ func DeleteMultipleValuesConcurrently(client *api.Client, accountID, namespaceID
 				return
 			}
 
+			fmt.Printf("[VERBOSE] Batch %d completed successfully\n", b.batchIndex+1)
 			resultChan <- batchResult{
 				batchIndex: b.batchIndex,
 				success:    true,
@@ -350,6 +357,7 @@ func DeleteMultipleValuesConcurrently(client *api.Client, accountID, namespaceID
 
 		// Call progress callback
 		progressCallback(completed, len(batches))
+		fmt.Printf("[DEBUG] Completed %d/%d batches, success count: %d\n", completed, len(batches), successCount)
 	}
 
 	return successCount, errors

@@ -17,6 +17,7 @@ type KeyValuePair struct {
 type KeyValueMetadata map[string]interface{}
 
 // KeyName represents a single key name for bulk operations
+// NOTE: The Cloudflare API for bulk delete expects an array of strings rather than objects
 type KeyName struct {
 	Name string `json:"name"`
 }
