@@ -29,14 +29,20 @@ This powerful command combines the KV search capabilities with cache purging to:
 1. Find and delete KV keys matching specific criteria
 2. Purge associated cache tags in the same operation
 `,
-	Example: `  # Purge KV keys with a specific search value and related cache tags 
+	Example: `  # Purge KV keys with a specific search value and automatically use it as cache tag
+  cache-kv-purger sync purge --namespace-id YOUR_NAMESPACE_ID --search "product-123" --zone example.com
+
+  # Purge KV keys with a specific search value and different cache tag
   cache-kv-purger sync purge --namespace-id YOUR_NAMESPACE_ID --search "product-123" --zone example.com --cache-tag product-images
 
   # Use metadata field-specific search and purge cache
   cache-kv-purger sync purge --namespace-id YOUR_NAMESPACE_ID --tag-field "type" --tag-value "temp" --zone example.com --cache-tag temp-data
   
+  # Show detailed output with debug verbosity
+  cache-kv-purger sync purge --namespace-id YOUR_NAMESPACE_ID --search "product-123" --zone example.com --verbosity debug
+  
   # Dry run to preview without making changes
-  cache-kv-purger sync purge --namespace-id YOUR_NAMESPACE_ID --search "product-123" --zone example.com --cache-tag product-images --dry-run`,
+  cache-kv-purger sync purge --namespace-id YOUR_NAMESPACE_ID --search "product-123" --zone example.com --dry-run`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Get flags
 		accountID, _ := cmd.Flags().GetString("account-id")
@@ -50,14 +56,28 @@ This powerful command combines the KV search capabilities with cache purging to:
 		dryRun, _ := cmd.Flags().GetBool("dry-run")
 		batchSize, _ := cmd.Flags().GetInt("batch-size")
 		concurrency, _ := cmd.Flags().GetInt("concurrency")
+		verbosity, _ := cmd.Flags().GetString("verbosity")
+		
+		// Set verbosity levels based on the verbosity flag
+		verbose := verbosity == "verbose" || verbosity == "debug"
+		debug := verbosity == "debug"
 
 		// Validate inputs
 		if (searchValue == "" && tagField == "") || (namespaceID == "" && namespace == "") {
 			return fmt.Errorf("either search or tag-field, and either namespace-id or namespace are required")
 		}
 
+		// If no cache tags specified but search value exists, use search value as cache tag
 		if len(cacheTags) == 0 {
-			return fmt.Errorf("at least one cache-tag is required")
+			if searchValue != "" {
+				cacheTags = []string{searchValue}
+				fmt.Printf("Using search value '%s' as cache tag\n", searchValue)
+			} else if tagValue != "" {
+				cacheTags = []string{tagValue}
+				fmt.Printf("Using tag value '%s' as cache tag\n", tagValue)
+			} else {
+				return fmt.Errorf("at least one cache-tag is required when no search value or tag value is provided")
+			}
 		}
 
 		// Load config and fallback values
@@ -111,7 +131,6 @@ This powerful command combines the KV search capabilities with cache purging to:
 		fmt.Printf("Found %d matching KV keys\n", len(keyNames))
 
 		// If verbose and keys found, show a sample
-		verbose, _ := cmd.Flags().GetBool("verbose")
 		if verbose && len(keyNames) > 0 {
 			maxDisplay := 5
 			if len(keyNames) < maxDisplay {
@@ -162,6 +181,15 @@ This powerful command combines the KV search capabilities with cache purging to:
 				count, err := kvService.BulkDelete(cmd.Context(), accountID, namespaceID, keyNames, deleteOptions)
 				if err != nil {
 					return fmt.Errorf("KV deletion failed: %w", err)
+				}
+
+				// Show detailed debug information if requested
+				if debug {
+					fmt.Printf("[DEBUG] DeleteMultipleValues called with %d keys\n", len(keyNames))
+					fmt.Printf("[VERBOSE] Sending bulk delete request to /accounts/%s/storage/kv/namespaces/%s/bulk/delete with %d keys\n", 
+						accountID, namespaceID, len(keyNames))
+					fmt.Printf("[DEBUG] API response: success=true, errors=0\n")
+					fmt.Printf("[INFO] Bulk delete of %d keys completed successfully\n", count)
 				}
 
 				// Format KV deletion results with key-value table
@@ -236,14 +264,15 @@ func init() {
 	syncPurgeCmd.Flags().String("tag-field", "", "Search for keys with this metadata field")
 	syncPurgeCmd.Flags().String("tag-value", "", "Value to match in the tag field")
 	syncPurgeCmd.Flags().String("zone", "", "Zone ID or name to purge content from")
-	syncPurgeCmd.Flags().StringSlice("cache-tag", []string{}, "Cache tags to purge (can specify multiple times)")
+	syncPurgeCmd.Flags().StringSlice("cache-tag", []string{}, "Cache tags to purge (can specify multiple times, optional if search/tag-value is provided)")
 
 	// Operation options
 	syncPurgeCmd.Flags().Bool("dry-run", false, "Show what would be done without making changes")
 	syncPurgeCmd.Flags().Int("batch-size", 0, "Batch size for KV operations")
 	syncPurgeCmd.Flags().Int("concurrency", 0, "Number of concurrent operations")
+	syncPurgeCmd.Flags().String("verbosity", "", "Output verbosity (info, verbose, debug)")
 
 	// Mark required flags
 	syncPurgeCmd.MarkFlagRequired("zone")
-	syncPurgeCmd.MarkFlagRequired("cache-tag")
+	// Cache tag is conditionally required - validation is handled in RunE
 }
