@@ -175,6 +175,46 @@ This powerful command combines the KV search capabilities with cache purging to:
 							}
 						}
 						
+						// Add support for cacheTags (camelCase) field name
+						if cacheTags, ok := (*key.Metadata)["cacheTags"]; ok {
+							// If it's an array, process each element
+							if tagsArray, isArray := cacheTags.([]interface{}); isArray {
+								for _, tag := range tagsArray {
+									if tagStr, isString := tag.(string); isString {
+										tagMap[tagStr] = true
+									}
+								}
+							} else if tagsStr, isString := cacheTags.(string); isString {
+								// If it's a string, split by commas
+								for _, tag := range strings.Split(tagsStr, ",") {
+									trimmed := strings.TrimSpace(tag)
+									if trimmed != "" {
+										tagMap[trimmed] = true
+									}
+								}
+							}
+						}
+						
+						// Some store it as "tag" (singular)
+						if tag, ok := (*key.Metadata)["tag"]; ok {
+							// If it's a string, split by commas
+							if tagStr, isString := tag.(string); isString {
+								for _, t := range strings.Split(tagStr, ",") {
+									trimmed := strings.TrimSpace(t)
+									if trimmed != "" {
+										tagMap[trimmed] = true
+									}
+								}
+							} else if tagArray, isArray := tag.([]interface{}); isArray {
+								// If it's an array, convert each element
+								for _, t := range tagArray {
+									if tStr, isString := t.(string); isString {
+										tagMap[tStr] = true
+									}
+								}
+							}
+						}
+						
 						// Some store it as an array of tags
 						if tags, ok := (*key.Metadata)["tags"]; ok {
 							// If it's a string, split by commas
