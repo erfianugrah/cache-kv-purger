@@ -3,7 +3,9 @@ package main
 import (
 	"cache-kv-purger/internal/api"
 	"cache-kv-purger/internal/cache"
+	"cache-kv-purger/internal/common"
 	"cache-kv-purger/internal/config"
+	"cache-kv-purger/internal/zones"
 	"fmt"
 	"github.com/spf13/cobra"
 	"net/url"
@@ -50,7 +52,7 @@ func handleMultiZoneFilePurge(client *api.Client, zoneIDs []string, files []stri
 	// Create a map of zone ID to zone name for display
 	zoneNames := make(map[string]string)
 	for _, zoneID := range zoneIDs {
-		zoneInfo, err := getZoneInfo(client, zoneID)
+		zoneInfo, err := zones.GetZoneDetails(client, zoneID)
 		if err == nil && zoneInfo.Result.Name != "" {
 			zoneNames[zoneID] = zoneInfo.Result.Name
 		} else {
@@ -128,11 +130,11 @@ func handleMultiZoneFilePurge(client *api.Client, zoneIDs []string, files []stri
 			}
 
 			// Remove duplicates
-			zoneFiles = removeDuplicates(zoneFiles)
+			zoneFiles = common.RemoveDuplicates(zoneFiles)
 			totalFiles += len(zoneFiles)
 
 			// Calculate batches for display
-			batches := splitIntoBatches(zoneFiles, batchSize)
+			batches := common.SplitIntoBatches(zoneFiles, batchSize)
 
 			fmt.Printf("Zone %s: Would purge %d files in %d batches using %d concurrent workers\n",
 				zoneNames[zoneID], len(zoneFiles), len(batches), cacheConcurrency)
@@ -160,8 +162,10 @@ func handleMultiZoneFilePurge(client *api.Client, zoneIDs []string, files []stri
 	successCount := 0
 	totalFiles := 0
 
-	// Use a simple sequential approach for now since we don't have a specialized PurgeFilesInBatches function yet
-	// Future enhancement: Process zones concurrently with batched file operations
+	// TODO(enhancement): Implement concurrent zone processing with batched file operations
+	// - Add PurgeFilesInBatches function to cache package
+	// - Support concurrent batch processing across multiple zones
+	// - Add progress reporting similar to PurgeHostsInBatches
 	for _, zoneID := range zoneIDs {
 		zoneFiles := filesByZone[zoneID]
 		if len(zoneFiles) == 0 {
@@ -172,7 +176,7 @@ func handleMultiZoneFilePurge(client *api.Client, zoneIDs []string, files []stri
 		}
 
 		// Remove duplicates
-		zoneFiles = removeDuplicates(zoneFiles)
+		zoneFiles = common.RemoveDuplicates(zoneFiles)
 		totalFiles += len(zoneFiles)
 
 		if verbose {
@@ -184,13 +188,15 @@ func handleMultiZoneFilePurge(client *api.Client, zoneIDs []string, files []stri
 			fmt.Printf("Purging %d files for zone %s...\n", len(zoneFiles), zoneNames[zoneID])
 		}
 
-		// For large number of files, handle in batches (when we have a specialized function)
-		// For now, use the standard API call
-		// Future enhancement:
-		// if len(zoneFiles) > batchSize {
-		//     // Process with batching...
-		//     successful, errors := cache.PurgeFilesInBatches(client, zoneID, zoneFiles, progressFn, cacheConcurrency)
-		// }
+			// TODO(feature): Add batched file purging support
+			// - Create cache.PurgeFilesInBatches function similar to PurgeHostsInBatches
+			// - Handle large file sets with automatic batching
+			// - Implement progress tracking and reporting
+			//
+			// Implementation would look like:
+			// if len(zoneFiles) > batchSize {
+			//     successful, errors := cache.PurgeFilesInBatches(client, zoneID, zoneFiles, progressFn, cacheConcurrency)
+			// }
 
 		// Make the API call to purge files
 		resp, err := cache.PurgeFiles(client, zoneID, zoneFiles)

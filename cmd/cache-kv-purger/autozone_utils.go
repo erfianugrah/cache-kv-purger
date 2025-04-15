@@ -3,6 +3,7 @@ package main
 import (
 	"cache-kv-purger/internal/api"
 	"cache-kv-purger/internal/cache"
+	"cache-kv-purger/internal/common"
 	"cache-kv-purger/internal/zones"
 	"fmt"
 	"github.com/spf13/cobra"
@@ -120,10 +121,10 @@ func handleHostZoneDetection(client *api.Client, accountID string, hosts []strin
 		fmt.Printf("DRY RUN: Would purge items across %d zones\n", len(itemsByZone))
 		for zoneID, items := range itemsByZone {
 			// Remove duplicates
-			items = removeDuplicates(items)
+			items = common.RemoveDuplicates(items)
 
 			// Get zone info for display
-			zoneInfo, err := getZoneInfo(client, zoneID)
+			zoneInfo, err := zones.GetZoneDetails(client, zoneID)
 			zoneName := zoneID
 			if err == nil && zoneInfo.Result.Name != "" {
 				zoneName = zoneInfo.Result.Name
@@ -136,7 +137,7 @@ func handleHostZoneDetection(client *api.Client, accountID string, hosts []strin
 			}
 
 			// Calculate batches for display
-			batches := splitIntoBatches(items, batchSize)
+			batches := common.SplitIntoBatches(items, batchSize)
 
 			fmt.Printf("Zone: %s - would purge %d %s in %d batches using %d concurrent workers\n",
 				zoneName, len(items), itemType, len(batches), cacheConcurrency)
@@ -165,11 +166,11 @@ func handleHostZoneDetection(client *api.Client, accountID string, hosts []strin
 	// Process all zones with actual purging
 	for zoneID, items := range itemsByZone {
 		// Remove duplicates
-		items = removeDuplicates(items)
+		items = common.RemoveDuplicates(items)
 		totalItems += len(items)
 
 		// Get zone info for display
-		zoneInfo, err := getZoneInfo(client, zoneID)
+		zoneInfo, err := zones.GetZoneDetails(client, zoneID)
 		zoneName := zoneID
 		if err == nil && zoneInfo.Result.Name != "" {
 			zoneName = zoneInfo.Result.Name
@@ -184,17 +185,20 @@ func handleHostZoneDetection(client *api.Client, accountID string, hosts []strin
 
 			// For large number of files, use batching
 			if len(items) > batchSize {
-				// For specialized function for files with headers when implemented in the future:
-				// progressFn := func(completed, total, successful int) {
-				//     if verbose {
-				//         fmt.Printf("Progress for zone %s: processed %d/%d batches, %d files purged\n",
-				//             zoneName, completed, total, successful)
-				//     } else {
-				//         fmt.Printf("Zone %s: processing batch %d/%d: %d files purged so far...  \r",
-				//             zoneName, completed, total, successful)
-				//     }
-				// }
-				// successful, errors := PurgeFilesInBatches(client, zoneID, items, progressFn, cacheConcurrency)
+					// TODO(feature): Implement PurgeFilesInBatches function
+					// - Create progress tracking function similar to the one for hosts
+					// - Add advanced file purging in batches
+					// - Use progressFn to report progress:
+					//   progressFn := func(completed, total, successful int) {
+					//       if verbose {
+					//           fmt.Printf("Progress for zone %s: processed %d/%d batches, %d files purged\n",
+					//               zoneName, completed, total, successful)
+					//       } else {
+					//           fmt.Printf("Zone %s: processing batch %d/%d: %d files purged so far...  \r",
+					//               zoneName, completed, total, successful)
+					//       }
+					//   }
+					// - Run: successful, errors := cache.PurgeFilesInBatches(client, zoneID, items, progressFn, cacheConcurrency)
 
 				// For now, use standard API as batch function for files isn't implemented yet
 				resp, err := cache.PurgeFiles(client, zoneID, items)

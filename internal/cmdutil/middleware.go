@@ -46,6 +46,24 @@ func WithConfigAndClient(fn func(*cobra.Command, []string, *config.Config, *api.
 			return fmt.Errorf("failed to create API client: %w", err)
 		}
 
+		// Check verbosity settings as well - this ensures all commands using this middleware
+		// will respect the verbosity flags even if they don't use WithVerbose specifically
+		verbosityStr, _ := cmd.Root().PersistentFlags().GetString("verbosity")
+		verboseFlag, _ := cmd.Flags().GetBool("verbose")
+		
+		// Set verbose environment flag for commands to check
+		if verboseFlag || verbosityStr == "verbose" || verbosityStr == "debug" {
+			if cfg != nil {
+				cfg.SetValue("verbose", "true")
+			}
+		}
+
+		if verbosityStr == "debug" {
+			if cfg != nil {
+				cfg.SetValue("debug", "true")
+			}
+		}
+
 		return fn(cmd, args, cfg, client)
 	}
 }
@@ -53,19 +71,15 @@ func WithConfigAndClient(fn func(*cobra.Command, []string, *config.Config, *api.
 // WithVerbose adds a verbose flag extractor to simplify checking verbose mode
 func WithVerbose(fn func(*cobra.Command, []string, bool, bool) error) func(*cobra.Command, []string) error {
 	return func(cmd *cobra.Command, args []string) error {
-		verbosityStr, _ := cmd.Flags().GetString("verbosity")
-		verbose := false
-		debug := false
-
-		switch verbosityStr {
-		case "quiet":
-			// No output
-		case "verbose":
-			verbose = true
-		case "debug":
-			verbose = true
-			debug = true
-		}
+		// Check global verbosity flag (from root command)
+		verbosityStr, _ := cmd.Root().PersistentFlags().GetString("verbosity")
+		
+		// Check command-specific verbose flag
+		verboseFlag, _ := cmd.Flags().GetBool("verbose")
+		
+		// Determine verbose and debug status - either flag can enable verbose mode
+		verbose := verboseFlag || verbosityStr == "verbose" || verbosityStr == "debug"
+		debug := verbosityStr == "debug"
 
 		return fn(cmd, args, verbose, debug)
 	}

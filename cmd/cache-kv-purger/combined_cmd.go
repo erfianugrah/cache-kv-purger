@@ -3,6 +3,7 @@ package main
 import (
 	"cache-kv-purger/internal/api"
 	"cache-kv-purger/internal/cache"
+	"cache-kv-purger/internal/cmdutil"
 	"cache-kv-purger/internal/common"
 	"cache-kv-purger/internal/config"
 	"cache-kv-purger/internal/kv"
@@ -46,7 +47,7 @@ This powerful command combines the KV search capabilities with cache purging to:
   
   # Dry run to preview without making changes
   cache-kv-purger sync purge --namespace-id YOUR_NAMESPACE_ID --search "product-123" --zone example.com --dry-run`,
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: cmdutil.WithVerbose(func(cmd *cobra.Command, args []string, verbose, debug bool) error {
 		// Get flags
 		accountID, _ := cmd.Flags().GetString("account-id")
 		namespaceID, _ := cmd.Flags().GetString("namespace-id")
@@ -59,13 +60,10 @@ This powerful command combines the KV search capabilities with cache purging to:
 		dryRun, _ := cmd.Flags().GetBool("dry-run")
 		batchSize, _ := cmd.Flags().GetInt("batch-size")
 		concurrency, _ := cmd.Flags().GetInt("concurrency")
-		verbosity, _ := cmd.Flags().GetString("verbosity")
 		derivedTags, _ := cmd.Flags().GetBool("derived-tags")
 		extractTags, _ := cmd.Flags().GetBool("extract-tags")
 		
-		// Set verbosity levels based on the verbosity flag
-		verbose := verbosity == "verbose" || verbosity == "debug"
-		debug := verbosity == "debug"
+		// Middleware now handles verbosity flags
 
 		// Validate inputs
 		if (searchValue == "" && tagField == "") || (namespaceID == "" && namespace == "") {
@@ -386,7 +384,7 @@ This powerful command combines the KV search capabilities with cache purging to:
 		fmt.Println()
 		common.FormatKeyValueTable(resultData)
 		return nil
-	},
+	}),
 }
 
 func init() {
@@ -414,7 +412,7 @@ func init() {
 	syncPurgeCmd.Flags().Bool("dry-run", false, "Show what would be done without making changes")
 	syncPurgeCmd.Flags().Int("batch-size", 0, "Batch size for KV operations")
 	syncPurgeCmd.Flags().Int("concurrency", 0, "Number of concurrent operations")
-	syncPurgeCmd.Flags().String("verbosity", "", "Output verbosity (info, verbose, debug)")
+	syncPurgeCmd.Flags().Bool("verbose", false, "Enable verbose output")
 
 	// Mark required flags
 	syncPurgeCmd.MarkFlagRequired("zone")

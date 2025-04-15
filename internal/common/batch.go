@@ -92,3 +92,37 @@ func (p *BatchProcessor) ProcessStrings(items []string, processor func([]string)
 
 	return successful, errors
 }
+
+// SplitIntoBatches splits a slice into batches of the specified size
+// This is a utility function for simple batch creation without needing the full BatchProcessor
+func SplitIntoBatches(items []string, batchSize int) [][]string {
+	// Calculate number of batches
+	numBatches := (len(items) + batchSize - 1) / batchSize
+
+	// Create batches
+	batches := make([][]string, 0, numBatches)
+	for i := 0; i < len(items); i += batchSize {
+		end := i + batchSize
+		if end > len(items) {
+			end = len(items)
+		}
+		batches = append(batches, items[i:end])
+	}
+
+	return batches
+}
+
+// RemoveDuplicates removes duplicate strings from a slice while preserving order
+func RemoveDuplicates(items []string) []string {
+	seen := make(map[string]bool)
+	result := make([]string, 0, len(items))
+
+	for _, item := range items {
+		if !seen[item] {
+			seen[item] = true
+			result = append(result, item)
+		}
+	}
+
+	return result
+}

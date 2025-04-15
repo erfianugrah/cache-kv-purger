@@ -49,7 +49,7 @@ func init() {
 	// Add global flags to purge command
 	purgeCmd.PersistentFlags().StringVar(&purgeFlagsVars.zoneID, "zone", "", "Zone ID or name to purge content from")
 	purgeCmd.PersistentFlags().StringArrayVar(&purgeFlagsVars.zones, "zones", []string{}, "Zone IDs or names to purge content from (can be specified multiple times)")
-	purgeCmd.PersistentFlags().BoolP("verbose", "v", false, "Enable verbose output")
+	purgeCmd.PersistentFlags().BoolP("verbose", "v", false, "Enable verbose output. Can also use global --verbosity=verbose")
 	purgeCmd.PersistentFlags().Bool("all-zones", false, "Purge content from all zones in the account")
 	purgeCmd.PersistentFlags().String("zone-list", "", "Comma-delimited list of zone IDs or names to purge content from")
 	purgeCmd.PersistentFlags().IntVar(&purgeFlagsVars.cacheConcurrency, "concurrency", 0, "Number of concurrent cache operations (default 10, max 20)")

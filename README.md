@@ -206,11 +206,40 @@ The tool prioritizes configuration sources in the following order:
 3. Configuration file (created with `config set-defaults`)
 4. Built-in defaults (lowest priority)
 
+## Verbosity Controls
+
+The tool provides two ways to control verbosity level:
+
+### Global Verbosity Flag
+
+```bash
+cache-kv-purger --verbosity=<level> <command>
+```
+
+Supported verbosity levels:
+- `quiet`: Minimal output showing only results and errors
+- `normal`: Standard output (default)
+- `verbose`: Detailed output including progress and operation details
+- `debug`: Developer-level debug information
+
+### Command-specific Verbose Flag
+
+Each command also supports a command-specific verbose flag for convenience:
+
+```bash
+cache-kv-purger <command> --verbose
+```
+
+This is equivalent to using `--verbosity=verbose` and is provided for ease of use.
+
+If both flags are specified, the more verbose setting will be used. For example, if you use both `--verbose` and `--verbosity=debug`, the debug level will be applied.
+
 ## Global Commands
 
 All commands support the following global flags:
 
-- `--verbose`: Enable detailed output
+- `--verbosity`: Control output level as described above
+- `--verbose`: Enable detailed output (shorthand for --verbosity=verbose)
 - `--zone`: Specify a zone ID or domain name
 
 ### Config Command
@@ -1116,6 +1145,40 @@ func commandImplementation(cmd *cobra.Command, args []string, cfg *config.Config
 }
 ```
 
+### Code Organization
+
+The codebase is organized into several packages with clear separation of concerns:
+
+#### Command Structure
+
+- **`cmd/cache-kv-purger/`**: Contains the CLI commands and entry points
+  - Command files follow the naming pattern `*_cmd.go`
+  - Utility functions are being migrated to appropriate internal packages
+
+#### Internal Packages
+
+- **`internal/api/`**: Cloudflare API client and request handling
+- **`internal/auth/`**: Authentication mechanisms
+- **`internal/cache/`**: Cache-specific operations
+- **`internal/cmdutil/`**: Command creation utilities and middleware
+- **`internal/common/`**: Shared utilities and helpers
+  - `batch.go`: Batch processing functions
+  - `cache.go`: Cache-related utilities
+  - `errors.go`: Error handling
+  - `validation.go`: Input validation
+- **`internal/config/`**: Configuration management
+- **`internal/kv/`**: KV operations implementation
+- **`internal/zones/`**: Zone management utilities
+
+#### Recent Improvements
+
+The codebase has undergone organization improvements to:
+- Reduce code duplication by moving utility functions to appropriate packages
+- Create consistent naming patterns for files and functions
+- Improve separation of concerns
+- Standardize on the command builder pattern
+- Add proper documentation for future enhancements (see `references/internal/PLANNED_FEATURES.md`)
+
 ### Code Quality
 
 To ensure code quality during development:
@@ -1160,7 +1223,11 @@ git push origin v1.0.0
 - **[KV Documentation](KV_DOCUMENTATION.md)** - Comprehensive guide to the KV commands
 - **[LICENSE](LICENSE)** - MIT License details
 - **Additional Reference Materials** - Located in the `references/` directory:
-  - `references/internal/` - Internal design documents and improvement tracking
+  - `references/internal/PLANNED_FEATURES.md` - Future enhancements and features roadmap
+  - `references/internal/CLEANUP_PLAN.md` - Code organization and cleanup plan
+  - `references/internal/CLEANUP_SUMMARY.md` - Summary of completed cleanup work
+  - `references/internal/IMPROVEMENTS.md` - General improvement proposals
+  - `references/internal/UX_IMPROVEMENTS.md` - User experience improvement proposals
 
 ## License
 

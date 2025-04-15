@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"cache-kv-purger/internal/api"
+	"cache-kv-purger/internal/cmdutil"
 	"cache-kv-purger/internal/config"
 	"cache-kv-purger/internal/zones"
 	"github.com/spf13/cobra"
@@ -21,7 +22,7 @@ var zonesListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List all zones",
 	Long:  `List all zones available for your account.`,
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: cmdutil.WithVerbose(func(cmd *cobra.Command, args []string, verbose, debug bool) error {
 		// Get account ID from flag, config, or environment variable
 		accountID, _ := cmd.Flags().GetString("account-id")
 		if accountID == "" {
@@ -39,7 +40,6 @@ var zonesListCmd = &cobra.Command{
 		}
 
 		// List zones
-		verbose, _ := cmd.Flags().GetBool("verbose")
 		if verbose {
 			if accountID != "" {
 				fmt.Printf("Listing zones for account %s...\n", accountID)
@@ -65,7 +65,7 @@ var zonesListCmd = &cobra.Command{
 		}
 
 		return nil
-	},
+	}),
 }
 
 // zonesGetCmd is the command for getting a zone by name
@@ -74,7 +74,7 @@ var zonesGetCmd = &cobra.Command{
 	Short: "Get a zone by domain name",
 	Long:  `Get a zone's details by its domain name.`,
 	Args:  cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: cmdutil.WithVerbose(func(cmd *cobra.Command, args []string, verbose, debug bool) error {
 		// Get domain name from arguments
 		domainName := args[0]
 
@@ -95,7 +95,6 @@ var zonesGetCmd = &cobra.Command{
 		}
 
 		// Get zone
-		verbose, _ := cmd.Flags().GetBool("verbose")
 		if verbose {
 			fmt.Printf("Looking up zone for domain '%s'...\n", domainName)
 		}
@@ -126,7 +125,7 @@ var zonesGetCmd = &cobra.Command{
 		fmt.Printf("  - Set environment variable: export CLOUDFLARE_ZONE_ID=%s\n", zone.ID)
 
 		return nil
-	},
+	}),
 }
 
 // zonesConfigCmd is the command for setting a default zone
@@ -134,7 +133,7 @@ var zonesConfigCmd = &cobra.Command{
 	Use:   "config",
 	Short: "Configure default zone",
 	Long:  `Set a default zone to use for cache operations.`,
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: cmdutil.WithVerbose(func(cmd *cobra.Command, args []string, verbose, debug bool) error {
 		// Load existing config
 		cfg, err := config.LoadFromFile("")
 		if err != nil {
@@ -205,7 +204,7 @@ var zonesConfigCmd = &cobra.Command{
 		}
 
 		return nil
-	},
+	}),
 }
 
 // isHexString checks if a string contains only hexadecimal characters

@@ -3,6 +3,7 @@ package main
 import (
 	"cache-kv-purger/internal/api"
 	"cache-kv-purger/internal/cache"
+	"cache-kv-purger/internal/cmdutil"
 	"cache-kv-purger/internal/common"
 	"cache-kv-purger/internal/config"
 	"cache-kv-purger/internal/zones"
@@ -38,9 +39,8 @@ func createPurgePrefixesCmd() *cobra.Command {
   
   # Dry run (show what would be purged, but don't actually purge)
   cache-kv-purger cache purge prefixes --zone example.com --prefixes-file prefixes.txt --dry-run`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			// Get verbose flag once at the beginning
-			verbose, _ := cmd.Flags().GetBool("verbose")
+		RunE: cmdutil.WithVerbose(func(cmd *cobra.Command, args []string, verbose, debug bool) error {
+			// Middleware now handles verbose flags
 
 			// Create API client
 			client, err := api.NewClient()
@@ -249,7 +249,7 @@ func createPurgePrefixesCmd() *cobra.Command {
 			// Final summary
 			fmt.Printf("Completed: Successfully purged %d prefixes\n", len(successful))
 			return nil
-		},
+		}),
 	}
 
 	cmd.Flags().StringArrayVar(&purgeFlagsVars.prefixes, "prefix", []string{}, "URL prefix to purge (can be specified multiple times)")

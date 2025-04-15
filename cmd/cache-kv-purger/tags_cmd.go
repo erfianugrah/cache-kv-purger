@@ -3,6 +3,7 @@ package main
 import (
 	"cache-kv-purger/internal/api"
 	"cache-kv-purger/internal/cache"
+	"cache-kv-purger/internal/cmdutil"
 	"cache-kv-purger/internal/config"
 	"cache-kv-purger/internal/zones"
 	"encoding/csv"
@@ -43,9 +44,8 @@ func createPurgeTagsCmd() *cobra.Command {
   
   # Dry run (show what would be purged, but don't actually purge)
   cache-kv-purger cache purge tags --zone example.com --tags-file tags.csv --dry-run`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			// Get verbose flag once at the beginning
-			verbose, _ := cmd.Flags().GetBool("verbose")
+		RunE: cmdutil.WithVerbose(func(cmd *cobra.Command, args []string, verbose, debug bool) error {
+			// Middleware now handles verbose flags
 
 			// Create API client
 			client, err := api.NewClient()
@@ -314,7 +314,7 @@ func createPurgeTagsCmd() *cobra.Command {
 			// Final summary
 			fmt.Printf("Completed: Successfully purged %d tags\n", len(successful))
 			return nil
-		},
+		}),
 	}
 
 	cmd.Flags().StringArrayVar(&purgeFlagsVars.tags, "tag", []string{}, "Cache tag to purge (can be specified multiple times)")

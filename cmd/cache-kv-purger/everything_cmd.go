@@ -3,6 +3,7 @@ package main
 import (
 	"cache-kv-purger/internal/api"
 	"cache-kv-purger/internal/cache"
+	"cache-kv-purger/internal/cmdutil"
 	"cache-kv-purger/internal/config"
 	"fmt"
 	"github.com/spf13/cobra"
@@ -22,7 +23,7 @@ func createPurgeEverythingCmd() *cobra.Command {
 
   # Purge everything from all zones in an account
   cache-kv-purger cache purge everything --all-zones`,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: cmdutil.WithVerbose(func(cmd *cobra.Command, args []string, verbose, debug bool) error {
 			// Create API client
 			client, err := api.NewClient()
 			if err != nil {
@@ -44,7 +45,6 @@ func createPurgeEverythingCmd() *cobra.Command {
 
 			// Track successes
 			successCount := 0
-			verbose, _ := cmd.Flags().GetBool("verbose")
 
 			// Purge everything for each zone
 			for _, zoneID := range resolvedZoneIDs {
@@ -75,7 +75,7 @@ func createPurgeEverythingCmd() *cobra.Command {
 			// Final summary
 			fmt.Printf("Successfully purged content from %d/%d zones\n", successCount, len(resolvedZoneIDs))
 			return nil
-		},
+		}),
 	}
 
 	return cmd

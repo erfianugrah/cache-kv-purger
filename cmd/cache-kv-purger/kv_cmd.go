@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cache-kv-purger/internal/cmdutil"
 	"fmt"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -105,12 +106,18 @@ func init() {
 	// Add validation for missing values to all KV commands
 	addMissingValueValidation(kvCmd)
 
-	// Note: All KV commands are now implemented using the verb-based approach,
-	// with consolidated commands registered in kv_consolidated_cmd.go
-
 	// Add direct flags to kvCmd for common use cases
 	kvCmd.PersistentFlags().StringVar(&kvFlagsVars.namespaceID, "namespace-id", "", "ID of the namespace")
 	kvCmd.PersistentFlags().StringVar(&kvFlagsVars.title, "title", "", "Title of the namespace")
 	kvCmd.PersistentFlags().StringVar(&kvFlagsVars.file, "file", "", "Output or input file path")
 	kvCmd.PersistentFlags().StringVar(&kvFlagsVars.key, "key", "", "Key name")
+	
+	// Add all KV subcommands directly in kv_cmd.go using the builder pattern
+	kvCmd.AddCommand(cmdutil.NewKVListCommand().Build())
+	kvCmd.AddCommand(cmdutil.NewKVGetCommand().Build())
+	kvCmd.AddCommand(cmdutil.NewKVPutCommand().Build())
+	kvCmd.AddCommand(cmdutil.NewKVDeleteCommand().Build())
+	kvCmd.AddCommand(cmdutil.NewKVCreateCommand().Build())
+	kvCmd.AddCommand(cmdutil.NewKVRenameCommand().Build())
+	kvCmd.AddCommand(cmdutil.NewKVConfigCommand().Build())
 }

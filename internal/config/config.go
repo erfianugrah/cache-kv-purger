@@ -34,6 +34,9 @@ type Config struct {
 	AccountID            string `json:"account_id,omitempty"`
 	CacheConcurrency     int    `json:"cache_concurrency,omitempty"`
 	MultiZoneConcurrency int    `json:"multi_zone_concurrency,omitempty"`
+	
+	// Runtime configuration values (not persisted)
+	runtimeValues map[string]string
 }
 
 // New creates a Config with default values
@@ -42,6 +45,7 @@ func New() *Config {
 		APIEndpoint:          DefaultAPIEndpoint,
 		CacheConcurrency:     DefaultCacheConcurrency,
 		MultiZoneConcurrency: DefaultMultiZoneConcurrency,
+		runtimeValues:        make(map[string]string),
 	}
 }
 
@@ -187,4 +191,30 @@ func fileExists(filename string) bool {
 		return false
 	}
 	return !info.IsDir()
+}
+
+// SetValue sets a runtime configuration value
+func (c *Config) SetValue(key, value string) {
+	if c.runtimeValues == nil {
+		c.runtimeValues = make(map[string]string)
+	}
+	c.runtimeValues[key] = value
+}
+
+// GetValue gets a runtime configuration value
+func (c *Config) GetValue(key string) string {
+	if c.runtimeValues == nil {
+		return ""
+	}
+	return c.runtimeValues[key]
+}
+
+// IsVerbose returns true if verbose output is enabled
+func (c *Config) IsVerbose() bool {
+	return c.GetValue("verbose") == "true"
+}
+
+// IsDebug returns true if debug output is enabled
+func (c *Config) IsDebug() bool {
+	return c.GetValue("debug") == "true"
 }
