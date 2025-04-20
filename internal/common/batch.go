@@ -75,19 +75,71 @@ func (p *BatchProcessor) ProcessStrings(items []string, processor func([]string)
 		batches = append(batches, items[i:end])
 	}
 
-	// Process each batch (simplified version without concurrency for now)
+	// Create a result channel for completed batches
+	type batchResult struct {
+		batchIndex int
+		results    []string
+		err        error
+	}
+
+	resultChan := make(chan batchResult, len(batches))
+
+	// Use a semaphore to limit concurrent goroutines
+	sem := make(chan struct{}, p.Concurrency)
+
+	// Process all batches concurrently with semaphore control
+	for idx, batch := range batches {
+		// Acquire semaphore slot
+		sem <- struct{}{}
+
+		// Launch a goroutine to process this batch
+		go func(batchIdx int, batchItems []string) {
+			defer func() { <-sem }() // Release semaphore when done
+
+			// Process this batch
+			results, err := processor(batchItems)
+
+			// Send result back through channel
+			if err != nil {
+				resultChan <- batchResult{
+					batchIndex: batchIdx,
+					results:    nil,
+					err:        err,
+				}
+				return
+			}
+
+			resultChan <- batchResult{
+				batchIndex: batchIdx,
+				results:    results,
+				err:        nil,
+			}
+		}(idx, batch)
+	}
+
+	// Collect results
 	var successful []string
 	var errors []error
 
-	for batchIdx, batch := range batches {
-		results, err := processor(batch)
-		if err != nil {
-			errors = append(errors, err)
-		} else {
-			successful = append(successful, results...)
+	// Track progress
+	completed := 0
+
+	// Collect results from all batches
+	for i := 0; i < len(batches); i++ {
+		result := <-resultChan
+
+		// Save error or success
+		if result.err != nil {
+			errors = append(errors, result.err)
+		} else if result.results != nil {
+			successful = append(successful, result.results...)
 		}
 
-		p.ProgressCallback(batchIdx+1, len(batches), len(successful))
+		// Update progress
+		completed++
+
+		// Call progress callback
+		p.ProgressCallback(completed, len(batches), len(successful))
 	}
 
 	return successful, errors

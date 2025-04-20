@@ -52,7 +52,7 @@ func init() {
 	purgeCmd.PersistentFlags().BoolP("verbose", "v", false, "Enable verbose output. Can also use global --verbosity=verbose")
 	purgeCmd.PersistentFlags().Bool("all-zones", false, "Purge content from all zones in the account")
 	purgeCmd.PersistentFlags().String("zone-list", "", "Comma-delimited list of zone IDs or names to purge content from")
-	purgeCmd.PersistentFlags().IntVar(&purgeFlagsVars.cacheConcurrency, "concurrency", 0, "Number of concurrent cache operations (default 10, max 20)")
-	purgeCmd.PersistentFlags().IntVar(&purgeFlagsVars.multiZoneConcurrency, "zone-concurrency", 0, "Number of zones to process concurrently (default 3)")
+	purgeCmd.PersistentFlags().IntVar(&purgeFlagsVars.cacheConcurrency, "concurrency", 10, "Number of concurrent cache operations (default 10, max 20)")
+	purgeCmd.PersistentFlags().IntVar(&purgeFlagsVars.multiZoneConcurrency, "zone-concurrency", 3, "Number of zones to process concurrently (default 3)")
 	purgeCmd.PersistentFlags().Bool("dry-run", false, "Show what would be purged without actually purging")
 }
