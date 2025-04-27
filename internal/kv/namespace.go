@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"regexp"
 
 	"cache-kv-purger/internal/api"
@@ -29,36 +30,61 @@ type NamespacesResponse struct {
 	Success  bool        `json:"success"`
 	Errors   []api.Error `json:"errors,omitempty"`
 	Messages []string    `json:"messages,omitempty"`
+	ResultInfo struct {
+		Cursor string `json:"cursor"`
+		Count  int    `json:"count"`
+	} `json:"result_info"`
 	Result   []Namespace `json:"result"`
 }
 
-// ListNamespaces lists all KV namespaces for an account
+// ListNamespaces lists all KV namespaces for an account with automatic pagination
 func ListNamespaces(client *api.Client, accountID string) ([]Namespace, error) {
 	if accountID == "" {
 		return nil, fmt.Errorf("account ID is required")
 	}
 
 	path := fmt.Sprintf("/accounts/%s/storage/kv/namespaces", accountID)
+	
+	var allNamespaces []Namespace
+	var cursor string
 
-	respBody, err := client.Request(http.MethodGet, path, nil, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	var nsResp NamespacesResponse
-	if err := json.Unmarshal(respBody, &nsResp); err != nil {
-		return nil, fmt.Errorf("failed to parse API response: %w", err)
-	}
-
-	if !nsResp.Success {
-		errorStr := "API reported failure"
-		if len(nsResp.Errors) > 0 {
-			errorStr = nsResp.Errors[0].Message
+	for {
+		// Set up query parameters for pagination if we have a cursor
+		var queryParams url.Values
+		if cursor != "" {
+			queryParams = url.Values{}
+			queryParams.Set("cursor", cursor)
 		}
-		return nil, fmt.Errorf("failed to list namespaces: %s", errorStr)
+
+		respBody, err := client.Request(http.MethodGet, path, queryParams, nil)
+		if err != nil {
+			return nil, err
+		}
+
+		var nsResp NamespacesResponse
+		if err := json.Unmarshal(respBody, &nsResp); err != nil {
+			return nil, fmt.Errorf("failed to parse API response: %w", err)
+		}
+
+		if !nsResp.Success {
+			errorStr := "API reported failure"
+			if len(nsResp.Errors) > 0 {
+				errorStr = nsResp.Errors[0].Message
+			}
+			return nil, fmt.Errorf("failed to list namespaces: %s", errorStr)
+		}
+
+		// Append results from this page
+		allNamespaces = append(allNamespaces, nsResp.Result...)
+
+		// Check if we need to fetch more pages
+		cursor = nsResp.ResultInfo.Cursor
+		if cursor == "" {
+			break
+		}
 	}
 
-	return nsResp.Result, nil
+	return allNamespaces, nil
 }
 
 // GetNamespace gets details of a specific namespace
