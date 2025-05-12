@@ -7,6 +7,7 @@ import (
 	"cache-kv-purger/internal/common"
 	"cache-kv-purger/internal/config"
 	"cache-kv-purger/internal/kv"
+	"cache-kv-purger/internal/zones"
 	"fmt"
 	"github.com/spf13/cobra"
 	"strings"
@@ -348,7 +349,7 @@ This powerful command combines the KV search capabilities with cache purging to:
 			fmt.Printf("DRY RUN: Would purge %d cache tags: %s\n", len(cacheTags), strings.Join(cacheTags, ", "))
 		} else {
 			// Resolve zone ID if needed
-			zoneID, err := common.ResolveZoneIdentifier(client, zone)
+			zoneID, err := zones.ResolveZoneIdentifier(client, accountID, zone)
 			if err != nil {
 				return fmt.Errorf("failed to resolve zone: %w", err)
 			}

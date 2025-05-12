@@ -28,8 +28,9 @@ var purgeFlagsVars struct {
 	tags                 []string
 	hosts                []string
 	prefixes             []string
-	cacheConcurrency     int // Concurrency for cache operations
-	multiZoneConcurrency int // Concurrency for multi-zone operations
+	cacheConcurrency     int  // Concurrency for cache operations
+	multiZoneConcurrency int  // Concurrency for multi-zone operations
+	force                bool // Skip confirmation prompt
 }
 
 func init() {

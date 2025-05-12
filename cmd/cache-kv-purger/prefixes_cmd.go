@@ -101,7 +101,7 @@ func createPurgePrefixesCmd() *cobra.Command {
 			}
 
 			// Remove duplicate prefixes
-			allPrefixes = removeDuplicates(allPrefixes)
+			allPrefixes = common.RemoveDuplicates(allPrefixes)
 
 			// Verify we have prefixes
 			if len(allPrefixes) == 0 {
@@ -166,15 +166,19 @@ func createPurgePrefixesCmd() *cobra.Command {
 					return fmt.Errorf("failed to purge prefixes: %w", err)
 				}
 
-				// Format success with key-value table
-				data := make(map[string]string)
-				data["Operation"] = "Purge Prefixes"
-				data["Zone"] = resolvedZoneID
-				data["Prefixes Purged"] = fmt.Sprintf("%d", len(allPrefixes))
-				data["Purge ID"] = resp.Result.ID
-				data["Status"] = "Success"
+				// Use the new formatter for consistent output
+				formatter := common.NewOutputFormatter()
+				if verbose {
+					formatter.WithVerbosity(common.NewVerbosity(common.VerbosityVerbose))
+				}
 
-				common.FormatKeyValueTable(data)
+				// Format success message
+				details := map[string]string{
+					"Zone":     resolvedZoneID,
+					"Purge ID": resp.Result.ID,
+				}
+
+				formatter.FormatSuccess("purged", len(allPrefixes), "prefixes", details)
 				return nil
 			}
 
@@ -193,7 +197,7 @@ func createPurgePrefixesCmd() *cobra.Command {
 			}
 
 			// Split prefixes into batches (for preview in dry run mode)
-			batches := splitIntoBatches(allPrefixes, batchSize)
+			batches := common.SplitIntoBatches(allPrefixes, batchSize)
 
 			if verbose {
 				fmt.Printf("Preparing to purge %d prefixes in %d batches using %d concurrent workers\n",

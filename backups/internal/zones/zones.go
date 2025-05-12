@@ -1,6 +1,7 @@
 package zones
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -34,20 +35,21 @@ func ListZones(client *api.Client, accountID string) (*ZoneListResponse, error) 
 		return nil, err
 	}
 
-	// Parse the response using our generic parser
-	var zones []api.Zone
-	resp, err := api.ParsePaginatedResponse(respBody, &zones)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list zones: %w", err)
+	// Parse the response
+	var zonesResp ZoneListResponse
+	if err := json.Unmarshal(respBody, &zonesResp); err != nil {
+		return nil, fmt.Errorf("failed to parse API response: %w", err)
 	}
 
-	// Build the response object
-	zonesResp := &ZoneListResponse{
-		PaginatedResponse: *resp,
-		Result:            zones,
+	if !zonesResp.Success {
+		errorStr := "API reported failure"
+		if len(zonesResp.Errors) > 0 {
+			errorStr = zonesResp.Errors[0].Message
+		}
+		return nil, fmt.Errorf("failed to list zones: %s", errorStr)
 	}
 
-	return zonesResp, nil
+	return &zonesResp, nil
 }
 
 // GetZoneByName finds a zone by its domain name
@@ -66,18 +68,25 @@ func GetZoneByName(client *api.Client, accountID, name string) (*api.Zone, error
 		return nil, err
 	}
 
-	// Parse the response using our generic parser
-	var zones []api.Zone
-	_, err = api.ParsePaginatedResponse(respBody, &zones)
-	if err != nil {
-		return nil, fmt.Errorf("failed to find zone: %w", err)
+	// Parse the response
+	var zonesResp ZoneListResponse
+	if err := json.Unmarshal(respBody, &zonesResp); err != nil {
+		return nil, fmt.Errorf("failed to parse API response: %w", err)
 	}
 
-	if len(zones) == 0 {
+	if !zonesResp.Success {
+		errorStr := "API reported failure"
+		if len(zonesResp.Errors) > 0 {
+			errorStr = zonesResp.Errors[0].Message
+		}
+		return nil, fmt.Errorf("failed to find zone: %s", errorStr)
+	}
+
+	if len(zonesResp.Result) == 0 {
 		return nil, fmt.Errorf("no zone found with name '%s'", name)
 	}
 
-	return &zones[0], nil
+	return &zonesResp.Result[0], nil
 }
 
 // ResolveZoneIdentifier takes a string that could be either:
@@ -137,19 +146,20 @@ func GetZoneDetails(client *api.Client, zoneID string) (*ZoneDetailsResponse, er
 		return nil, err
 	}
 
-	var zone api.Zone
-	resp, err := api.ParseAPIResponse(respBody, &zone)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get zone details: %w", err)
+	var detailsResp ZoneDetailsResponse
+	if err := json.Unmarshal(respBody, &detailsResp); err != nil {
+		return nil, fmt.Errorf("failed to parse API response: %w", err)
 	}
 
-	// Build the response object
-	detailsResp := &ZoneDetailsResponse{
-		APIResponse: *resp,
-		Result:      zone,
+	if !detailsResp.Success {
+		errorStr := "API reported failure"
+		if len(detailsResp.Errors) > 0 {
+			errorStr = detailsResp.Errors[0].Message
+		}
+		return nil, fmt.Errorf("failed to get zone details: %s", errorStr)
 	}
 
-	return detailsResp, nil
+	return &detailsResp, nil
 }
 
 // DetectZonesFromHosts attempts to find the appropriate zone for each hostname
@@ -231,90 +241,6 @@ func GroupItemsByZone(hostZones map[string]string, itemsByHost map[string][]stri
 	}
 
 	return itemsByZone
-}
-
-// ProcessMultiZoneItems processes items grouped by zone using a handler function
-// handler is a function that processes items for a specific zone
-// verbose enables verbose output
-// dryRun only shows what would be processed without actual processing
-// concurrency specifies how many zones to process concurrently
-func ProcessMultiZoneItems(
-	client *api.Client,
-	itemsByZone map[string][]string,
-	handler func(zoneID string, zoneName string, items []string) (bool, error),
-	verbose bool,
-	dryRun bool,
-	concurrency int,
-) (int, int, error) {
-	// Cap concurrency to reasonable limits
-	if concurrency <= 0 {
-		concurrency = 3 // Default
-	} else if concurrency > 5 {
-		concurrency = 5 // Max to avoid overwhelming API
-	}
-
-	// Track progress
-	successCount := 0
-	totalItems := 0
-
-	// For dry-run, just show what would be processed
-	if dryRun {
-		fmt.Printf("DRY RUN: Would process items across %d zones\n", len(itemsByZone))
-		for zoneID, items := range itemsByZone {
-			// Get zone info for display
-			zoneInfo, err := GetZoneDetails(client, zoneID)
-			zoneName := zoneID
-			if err == nil && zoneInfo.Result.Name != "" {
-				zoneName = zoneInfo.Result.Name
-			}
-
-			fmt.Printf("Zone: %s - would process %d items\n", zoneName, len(items))
-
-			if verbose {
-				// Show sample of items
-				for i, item := range items {
-					if i < 5 { // List first 5 items to avoid overwhelming output
-						fmt.Printf("  %d. %s\n", i+1, item)
-					} else if i == 5 {
-						fmt.Printf("  ... and %d more items\n", len(items)-5)
-						break
-					}
-				}
-			}
-
-			totalItems += len(items)
-		}
-
-		fmt.Printf("DRY RUN SUMMARY: Would process %d total items across %d zones\n", totalItems, len(itemsByZone))
-		return totalItems, len(itemsByZone), nil
-	}
-
-	// Process all zones with actual operation
-	for zoneID, items := range itemsByZone {
-		totalItems += len(items)
-
-		// Get zone info for display
-		zoneInfo, err := GetZoneDetails(client, zoneID)
-		zoneName := zoneID
-		if err == nil && zoneInfo.Result.Name != "" {
-			zoneName = zoneInfo.Result.Name
-		}
-
-		// Process items for this zone
-		success, err := handler(zoneID, zoneName, items)
-		if err != nil {
-			fmt.Printf("Error processing items for zone %s: %s\n", zoneName, err)
-			continue
-		}
-
-		if success {
-			successCount++
-		}
-	}
-
-	// Final summary
-	fmt.Printf("Successfully processed %d items across %d/%d zones\n", totalItems, successCount, len(itemsByZone))
-	return totalItems, successCount, nil
 }
 
 // ResolveZoneIdentifiers resolves zone identifiers from a list of zone names or IDs
