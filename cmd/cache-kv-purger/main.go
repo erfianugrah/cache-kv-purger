@@ -21,6 +21,11 @@ func init() {
 	// Add global flags
 	rootCmd.PersistentFlags().String("verbosity", "normal", "Verbosity level: quiet, normal, verbose, debug. Overrides command-specific --verbose flags")
 	rootCmd.PersistentFlags().StringP("zone", "z", "", "Cloudflare Zone ID or domain name (required for most commands)")
+
+	// Add demo commands to showcase functionality
+	rootCmd.AddCommand(createVerbosityDemoCmd())
+	rootCmd.AddCommand(createBatchDemoCmd())
+	rootCmd.AddCommand(createFormatDemoCmd())
 }
 
 // setupCommandValidation recursively adds help and flag validation to all commands

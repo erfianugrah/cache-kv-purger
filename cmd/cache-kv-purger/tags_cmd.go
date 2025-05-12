@@ -4,14 +4,11 @@ import (
 	"cache-kv-purger/internal/api"
 	"cache-kv-purger/internal/cache"
 	"cache-kv-purger/internal/cmdutil"
+	"cache-kv-purger/internal/common"
 	"cache-kv-purger/internal/config"
 	"cache-kv-purger/internal/zones"
-	"encoding/csv"
-	"encoding/json"
 	"fmt"
 	"github.com/spf13/cobra"
-	"os"
-	"path/filepath"
 	"strings"
 )
 
@@ -84,93 +81,21 @@ func createPurgeTagsCmd() *cobra.Command {
 
 			// Add tags from file if specified
 			if tagsFile != "" {
-				// Determine file extension
-				fileExt := strings.ToLower(filepath.Ext(tagsFile))
-
-				switch fileExt {
-				case ".json":
-					// Read JSON file
-					data, err := os.ReadFile(tagsFile)
-					if err != nil {
-						return fmt.Errorf("failed to read tags file: %w", err)
-					}
-
-					// Parse JSON data
-					var tags []string
-					err = json.Unmarshal(data, &tags)
-					if err != nil {
-						return fmt.Errorf("failed to parse JSON tags file: %w", err)
-					}
-
-					// Add tags
-					for _, tag := range tags {
-						tag = strings.TrimSpace(tag)
-						if tag != "" {
-							allTags = append(allTags, tag)
-						}
-					}
-
-					if verbose {
-						fmt.Printf("Added %d tags from JSON file\n", len(tags))
-					}
-
-				case ".csv":
-					// Read CSV file
-					file, err := os.Open(tagsFile)
-					if err != nil {
-						return fmt.Errorf("failed to open CSV file: %w", err)
-					}
-					defer file.Close()
-
-					// Create CSV reader
-					reader := csv.NewReader(file)
-					records, err := reader.ReadAll()
-					if err != nil {
-						return fmt.Errorf("failed to parse CSV file: %w", err)
-					}
-
-					// Process each record
-					tagCount := 0
-					for _, record := range records {
-						for _, field := range record {
-							tag := strings.TrimSpace(field)
-							if tag != "" && !strings.HasPrefix(tag, "#") {
-								allTags = append(allTags, tag)
-								tagCount++
-							}
-						}
-					}
-
-					if verbose {
-						fmt.Printf("Added %d tags from CSV file\n", tagCount)
-					}
-
-				default:
-					// Treat as text file (one tag per line)
-					data, err := os.ReadFile(tagsFile)
-					if err != nil {
-						return fmt.Errorf("failed to read tags file: %w", err)
-					}
-
-					// Process each line
-					lines := strings.Split(string(data), "\n")
-					tagCount := 0
-					for _, line := range lines {
-						tag := strings.TrimSpace(line)
-						if tag != "" && !strings.HasPrefix(tag, "#") {
-							allTags = append(allTags, tag)
-							tagCount++
-						}
-					}
-
-					if verbose {
-						fmt.Printf("Added %d tags from text file\n", tagCount)
-					}
+				// Use the centralized file reading utility
+				tagsFromFile, err := common.ReadItemsFromFile(tagsFile, "", nil)
+				if err != nil {
+					return fmt.Errorf("failed to read tags file: %w", err)
+				}
+				
+				allTags = append(allTags, tagsFromFile...)
+				
+				if verbose {
+					fmt.Printf("Added %d tags from file\n", len(tagsFromFile))
 				}
 			}
 
 			// Remove duplicate tags
-			allTags = removeDuplicates(allTags)
+			allTags = common.RemoveDuplicates(allTags)
 
 			// Check if we have any tags
 			if len(allTags) == 0 {
@@ -230,16 +155,32 @@ func createPurgeTagsCmd() *cobra.Command {
 
 				// Dry run mode
 				if dryRun {
-					fmt.Printf("DRY RUN: Would purge %d tags\n", len(allTags))
+					dryRunOpts := common.DryRunOptions{
+						Enabled:    true,
+						Verbose:    verbose,
+						ItemType:   "tags",
+						ActionVerb: "purge",
+						BatchSize:  batchSize,
+					}
+
+					// Use the standardized dry run handler
+					if !common.HandleDryRun(dryRunOpts, allTags, nil) {
+						return nil
+					}
+				}
+
+				// Confirm before purging, unless force is enabled
+				if purgeFlagsVars.force || common.ConfirmBatchOperation(len(allTags), "tags", "purge", purgeFlagsVars.force) {
+					resp, err := cache.PurgeTags(client, resolvedZoneID, allTags)
+					if err != nil {
+						return fmt.Errorf("failed to purge tags: %w", err)
+					}
+
+					fmt.Printf("Successfully purged content with %d tags. Purge ID: %s\n", len(allTags), resp.Result.ID)
+				} else {
+					fmt.Println("Operation cancelled.")
 					return nil
 				}
-
-				resp, err := cache.PurgeTags(client, resolvedZoneID, allTags)
-				if err != nil {
-					return fmt.Errorf("failed to purge tags: %w", err)
-				}
-
-				fmt.Printf("Successfully purged content with %d tags. Purge ID: %s\n", len(allTags), resp.Result.ID)
 				return nil
 			}
 
@@ -258,7 +199,7 @@ func createPurgeTagsCmd() *cobra.Command {
 			}
 
 			// Split tags into batches (for preview in dry run mode)
-			batches := splitIntoBatches(allTags, batchSize)
+			batches := common.SplitIntoBatches(allTags, batchSize)
 
 			if verbose {
 				fmt.Printf("Preparing to purge %d tags in %d batches using %d concurrent workers\n",
@@ -267,16 +208,18 @@ func createPurgeTagsCmd() *cobra.Command {
 
 			// Dry run mode
 			if dryRun {
-				fmt.Printf("DRY RUN: Would purge %d tags in %d batches (batch size: %d)\n", len(allTags), len(batches), batchSize)
-				for i, batch := range batches {
-					fmt.Printf("Batch %d: %d tags\n", i+1, len(batch))
-					if verbose {
-						for j, tag := range batch {
-							fmt.Printf("  %d. %s\n", j+1, tag)
-						}
-					}
+				dryRunOpts := common.DryRunOptions{
+					Enabled:    true,
+					Verbose:    verbose,
+					ItemType:   "tags",
+					ActionVerb: "purge",
+					BatchSize:  batchSize,
 				}
-				return nil
+
+				// Use the standardized dry run handler with sample display
+				if !common.HandleDryRunWithSample(dryRunOpts, allTags, batches) {
+					return nil
+				}
 			}
 
 			// Create progress function
@@ -288,6 +231,12 @@ func createPurgeTagsCmd() *cobra.Command {
 					fmt.Printf("Processing batch %d/%d: %d tags purged so far...  \r",
 						completed, total, successful)
 				}
+			}
+
+			// Confirm the operation unless force is enabled
+			if !purgeFlagsVars.force && !common.ConfirmBatchOperation(len(allTags), "tags", "purge", purgeFlagsVars.force) {
+				fmt.Println("Operation cancelled.")
+				return nil
 			}
 
 			// Process tags with concurrent batching
@@ -322,6 +271,7 @@ func createPurgeTagsCmd() *cobra.Command {
 	cmd.Flags().StringVar(&tagsFile, "tags-file", "", "Path to a file containing cache tags to purge (CSV, JSON, or text with one tag per line)")
 	cmd.Flags().IntVar(&batchSize, "batch-size", 100, "Maximum number of tags to purge in each batch (API limit: 100 tags per request)")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Show what would be purged without actually purging")
+	cmd.Flags().BoolVar(&purgeFlagsVars.force, "force", false, "Skip confirmation prompt")
 
 	return cmd
 }

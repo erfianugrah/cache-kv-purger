@@ -114,7 +114,7 @@ The Cloudflare API requires complete URLs for cache purging.`,
 			}
 
 			// Remove duplicates
-			allFiles = removeDuplicates(allFiles)
+			allFiles = common.RemoveDuplicates(allFiles)
 
 			// Verify all files are valid URLs
 			// Check if all files have a valid URL scheme

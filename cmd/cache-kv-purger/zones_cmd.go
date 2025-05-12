@@ -166,7 +166,7 @@ var zonesConfigCmd = &cobra.Command{
 				}
 
 				// Get the zone info to show the domain name
-				zoneInfo, err := getZoneInfo(client, resolvedZoneID)
+				zoneInfo, err := zones.GetZoneDetails(client, resolvedZoneID)
 				if err == nil && zoneInfo != nil {
 					fmt.Printf("Resolved zone name '%s' to ID: %s\n", zoneIdentifier, resolvedZoneID)
 				}
@@ -190,7 +190,7 @@ var zonesConfigCmd = &cobra.Command{
 				// Try to get the zone name for more informative output
 				client, err := api.NewClient()
 				if err == nil {
-					zoneInfo, err := getZoneInfo(client, zoneID)
+					zoneInfo, err := zones.GetZoneDetails(client, zoneID)
 					if err == nil && zoneInfo != nil {
 						fmt.Printf("Current default zone: %s (%s)\n", zoneInfo.Result.Name, zoneID)
 						return nil

@@ -5,6 +5,7 @@ import (
 	"cache-kv-purger/internal/cache"
 	"cache-kv-purger/internal/cmdutil"
 	"cache-kv-purger/internal/config"
+	"cache-kv-purger/internal/zones"
 	"fmt"
 	"github.com/spf13/cobra"
 )
@@ -84,7 +85,7 @@ func createPurgeEverythingCmd() *cobra.Command {
 					// Get zone name for reporting
 					zoneName := zID
 					if verbose {
-						zoneInfo, err := getZoneInfo(client, zID)
+						zoneInfo, err := zones.GetZoneDetails(client, zID)
 						if err == nil && zoneInfo.Result.Name != "" {
 							zoneName = zoneInfo.Result.Name
 						}

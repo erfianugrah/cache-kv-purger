@@ -4,6 +4,7 @@ import (
 	"cache-kv-purger/internal/api"
 	"cache-kv-purger/internal/cache"
 	"cache-kv-purger/internal/cmdutil"
+	"cache-kv-purger/internal/common"
 	"cache-kv-purger/internal/config"
 	"cache-kv-purger/internal/zones"
 	"fmt"
@@ -107,7 +108,7 @@ func createPurgeHostsCmd() *cobra.Command {
 			}
 
 			// Remove duplicate hosts
-			allHosts = removeDuplicates(allHosts)
+			allHosts = common.RemoveDuplicates(allHosts)
 
 			// Check if we have any hosts
 			if len(allHosts) == 0 {
@@ -205,7 +206,7 @@ func createPurgeHostsCmd() *cobra.Command {
 			}
 
 			// Split hosts into batches (for preview in dry run mode)
-			batches := splitIntoBatches(allHosts, batchSize)
+			batches := common.SplitIntoBatches(allHosts, batchSize)
 
 			if verbose {
 				fmt.Printf("Preparing to purge %d hosts in %d batches using %d concurrent workers\n",
