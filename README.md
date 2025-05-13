@@ -1205,18 +1205,33 @@ The linter will check for:
 - Unnecessary code
 - And many other quality concerns
 
-### Creating Releases
+### CI/CD Workflows
 
 The project uses GitHub Actions for continuous integration and deployment:
 
-```bash
-# Build and test workflow runs on push to main branch and pull requests
-git push origin main
+#### Build and Test Workflow
 
-# Release workflow is triggered by new tags
+This workflow runs on every push to the main branch and on pull requests:
+- Builds the application on Ubuntu, macOS, and Windows
+- Runs tests on Ubuntu
+- Performs linting checks
+
+The workflow is defined in `.github/workflows/build.yml`.
+
+#### Release Workflow
+
+This workflow is triggered when a new tag is pushed:
+- Automatically builds binaries for multiple platforms
+- Creates a GitHub release with the binaries
+- Uses GoReleaser for release management
+
+```bash
+# To trigger the release workflow
 git tag v1.0.0
 git push origin v1.0.0
 ```
+
+The workflow is defined in `.github/workflows/release.yml`.
 
 ## Documentation & References
 
