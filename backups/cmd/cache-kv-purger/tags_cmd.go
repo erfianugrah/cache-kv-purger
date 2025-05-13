@@ -15,6 +15,21 @@ import (
 	"strings"
 )
 
+// purgeFlagsVars stores the variables for the purge command flags
+var purgeFlagsVars struct {
+	zoneID               string
+	zones                []string // Support for multiple zones with --zones (repeated flag)
+	zonesCSV             []string // Support for multiple zones with --zone-list (comma separated)
+	purgeEverything      bool
+	files                []string
+	tags                 []string
+	hosts                []string
+	prefixes             []string
+	cacheConcurrency     int  // Concurrency for cache operations
+	multiZoneConcurrency int  // Concurrency for multi-zone operations
+	force                bool // Skip confirmation prompt
+}
+
 // createPurgeTagsCmd creates a command to purge cache by tag
 func createPurgeTagsCmd() *cobra.Command {
 	// Define local variables for this command's flags

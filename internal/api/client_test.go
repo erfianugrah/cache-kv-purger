@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"testing"
 	"time"
 )
@@ -28,9 +29,14 @@ func TestNewClient(t *testing.T) {
 		t.Errorf("Expected client to be created, got nil")
 	}
 
-	// Test with default options (will try to get credentials from ENV)
-	// This might fail depending on the environment, so we don't check for errors
-	client, _ = NewClient()
+	// Test with default options, with mocked credentials to avoid ENV dependency
+	os.Setenv(auth.EnvAPIToken, "test-env-token")
+	defer os.Unsetenv(auth.EnvAPIToken)
+	
+	client, err = NewClient()
+	if err != nil {
+		t.Errorf("Failed to create client with default options: %v", err)
+	}
 	if client == nil {
 		t.Errorf("Expected client to be created with defaults, got nil")
 	}
@@ -116,7 +122,18 @@ func TestURLBuilding(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			client, _ := NewClient(WithBaseURL(tc.base))
+			// Add mock credentials to avoid nil pointer
+			client, err := NewClient(
+				WithBaseURL(tc.base),
+				WithCredentials(&auth.CredentialInfo{
+					Type: auth.AuthTypeAPIToken,
+					Key:  "test-token",
+				}),
+			)
+			
+			if err != nil {
+				t.Fatalf("Failed to create client: %v", err)
+			}
 			
 			// Since buildRequestURL is not exported, we'll test through Request
 			// Create a mock http client to intercept the URL
