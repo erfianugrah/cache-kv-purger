@@ -116,7 +116,11 @@ func init() {
 	kvCmd.AddCommand(cmdutil.NewKVListCommand().Build())
 	kvCmd.AddCommand(cmdutil.NewKVGetCommand().Build())
 	kvCmd.AddCommand(cmdutil.NewKVPutCommand().Build())
-	kvCmd.AddCommand(cmdutil.NewKVDeleteCommand().Build())
+	
+	// Instead of adding the original delete command, add the fixed version
+	// kvCmd.AddCommand(cmdutil.NewKVDeleteCommand().Build())
+	addFixedDeleteCommand(kvCmd)
+	
 	kvCmd.AddCommand(cmdutil.NewKVCreateCommand().Build())
 	kvCmd.AddCommand(cmdutil.NewKVRenameCommand().Build())
 	kvCmd.AddCommand(cmdutil.NewKVConfigCommand().Build())
