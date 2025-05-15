@@ -1,6 +1,7 @@
 package cmdutil
 
 import (
+	"context"
 	"fmt"
 
 	"cache-kv-purger/internal/api"
@@ -31,6 +32,8 @@ func NewKVListCommand() *CommandBuilder {
 		batchSize   int
 		concurrency int
 		outputJSON  bool
+		verbose     bool
+		debug       bool
 	}
 
 	// Create command
@@ -91,6 +94,10 @@ When used with --namespace-id or --namespace, lists keys in the specified namesp
 		"concurrency", 0, "Number of concurrent operations", &opts.concurrency,
 	).WithBoolFlag(
 		"json", false, "Output as JSON", &opts.outputJSON,
+	).WithBoolFlag(
+		"verbose", false, "Enable verbose output", &opts.verbose,
+	).WithBoolFlag(
+		"debug", false, "Enable debug output", &opts.debug,
 	).WithRunE(
 		WithConfigAndClient(func(cmd *cobra.Command, args []string, cfg *config.Config, client *api.Client) error {
 			// Resolve account ID
@@ -113,7 +120,12 @@ When used with --namespace-id or --namespace, lists keys in the specified namesp
 
 			// If namespace ID is not provided, list namespaces
 			if opts.namespaceID == "" {
-				namespaces, err := service.ListNamespaces(cmd.Context(), accountID)
+				// Create a context with verbosity flags
+				verboseCtx := context.WithValue(cmd.Context(), "verbose", opts.verbose)
+				ctx := context.WithValue(verboseCtx, "debug", opts.debug)
+
+				// List namespaces with the enhanced context
+				namespaces, err := service.ListNamespaces(ctx, accountID)
 				if err != nil {
 					return fmt.Errorf("failed to list namespaces: %w", err)
 				}
@@ -129,7 +141,7 @@ When used with --namespace-id or --namespace, lists keys in the specified namesp
 				for i, ns := range namespaces {
 					rows[i] = []string{ns.ID, ns.Title}
 				}
-				fmt.Println("Namespaces:")
+				fmt.Printf("Namespaces (%d):\n", len(namespaces))
 				common.FormatTable(headers, rows)
 				return nil
 			}

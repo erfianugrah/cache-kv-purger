@@ -108,8 +108,41 @@ func NewKVService(client *api.Client) KVService {
 
 // ListNamespaces lists all KV namespaces for an account
 func (s *CloudflareKVService) ListNamespaces(ctx context.Context, accountID string) ([]Namespace, error) {
-	// Call existing function
-	return ListNamespaces(s.client, accountID)
+	// Check for verbosity flags from context
+	verbose := false
+	debug := false
+
+	// Check if we have a verbose context
+	if ctx.Value("verbose") != nil {
+		if v, ok := ctx.Value("verbose").(bool); ok && v {
+			verbose = true
+		}
+	}
+
+	// Check if we have a debug context
+	if ctx.Value("debug") != nil {
+		if d, ok := ctx.Value("debug").(bool); ok && d {
+			debug = true
+		}
+	}
+
+	// Use the enhanced listing with output if verbose or debug is enabled
+	if verbose || debug {
+		return ListNamespacesWithOutput(s.client, accountID, &ListNamespacesOptions{
+			Verbose: verbose,
+			Debug:   debug,
+		})
+	}
+
+	// Otherwise use the enhanced version without extra output
+	// to ensure all namespaces are properly retrieved
+	result, err := EnhancedListNamespaces(s.client, accountID, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	// Return the parsed namespaces
+	return result.Namespaces, nil
 }
 
 // CreateNamespace creates a new KV namespace
