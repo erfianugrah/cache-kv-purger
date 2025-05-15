@@ -88,7 +88,9 @@ func TestFormatKeyValueTable(t *testing.T) {
 
 	// Read the captured output
 	var output bytes.Buffer
-	io.Copy(&output, r)
+	if _, err := io.Copy(&output, r); err != nil {
+		t.Fatalf("Failed to read captured output: %v", err)
+	}
 	outputStr := output.String()
 
 	// Verify the output contains the expected content
@@ -124,7 +126,9 @@ func TestFormatTable(t *testing.T) {
 
 	// Read the captured output
 	var output bytes.Buffer
-	io.Copy(&output, r)
+	if _, err := io.Copy(&output, r); err != nil {
+		t.Fatalf("Failed to read captured output: %v", err)
+	}
 	outputStr := output.String()
 
 	// Verify the output contains all headers and data

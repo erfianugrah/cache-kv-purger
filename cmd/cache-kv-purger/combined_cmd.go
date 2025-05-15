@@ -416,6 +416,8 @@ func init() {
 	syncPurgeCmd.Flags().Bool("verbose", false, "Enable verbose output")
 
 	// Mark required flags
-	syncPurgeCmd.MarkFlagRequired("zone")
+	if err := syncPurgeCmd.MarkFlagRequired("zone"); err != nil {
+		fmt.Printf("Warning: could not mark zone flag as required: %v\n", err)
+	}
 	// Cache tag is conditionally required - validation is handled in RunE
 }

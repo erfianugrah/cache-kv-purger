@@ -28,7 +28,9 @@ func NewCommand(use, short, long string) *CommandBuilder {
 		// If this is a help request, skip validation
 		if helpEnabled, _ := cmd.Flags().GetBool("help"); helpEnabled {
 			// We're handling this specially because --help might be combined with invalid flags
-			cmd.Help()
+			if err := cmd.Help(); err != nil {
+				return err
+			}
 			return fmt.Errorf("help requested")
 		}
 
@@ -153,7 +155,9 @@ func AddFlagValidation(cmd *cobra.Command) {
 	cmd.PreRunE = func(cmd *cobra.Command, args []string) error {
 		// If this is a help request, skip validation
 		if helpFlag := cmd.Flags().Lookup("help"); helpFlag != nil && helpFlag.Changed {
-			cmd.Help()
+			if err := cmd.Help(); err != nil {
+				return err
+			}
 			return fmt.Errorf("help requested")
 		}
 

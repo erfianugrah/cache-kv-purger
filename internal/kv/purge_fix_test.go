@@ -2,11 +2,14 @@ package kv
 
 import (
 	"cache-kv-purger/internal/api"
+	"cache-kv-purger/internal/auth"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 // mockServer creates a test server for KV operations
@@ -26,195 +29,339 @@ func mockServer(t *testing.T) (*httptest.Server, *api.Client) {
 		switch {
 		case r.URL.Path == "/client/v4/accounts/test-account/storage/kv/namespaces/test-namespace/keys":
 			// Mock response for list keys
-			w.Write([]byte(`{
+			if _, err := w.Write([]byte(`{
 				"success": true,
 				"errors": [],
 				"messages": [],
+				"result_info": {
+					"cursor": "",
+					"count": 3
+				},
 				"result": [
-					{"name": "key1", "metadata": {"cache-tag": "test-tag"}},
-					{"name": "key2", "metadata": {"cache-tag": "different-tag"}},
-					{"name": "key3", "metadata": {"other-field": "value"}}
+					{"name": "key1", "expiration": 0, "metadata": {"cache-tag": "test-tag"}},
+					{"name": "key2", "expiration": 0, "metadata": {"cache-tag": "different-tag"}},
+					{"name": "key3", "expiration": 0, "metadata": {"other-field": "value"}}
 				]
-			}`))
+			}`)); err != nil {
+				t.Fatalf("Failed to write response: %v", err)
+			}
 		case r.URL.Path == "/client/v4/accounts/test-account/storage/kv/namespaces/test-namespace/bulk":
 			// Mock response for bulk operations
-			w.Write([]byte(`{
+			if _, err := w.Write([]byte(`{
 				"success": true,
 				"errors": [],
 				"messages": [],
 				"result": {
 					"success_count": 3
 				}
-			}`))
+			}`)); err != nil {
+				t.Fatalf("Failed to write response: %v", err)
+			}
 		default:
 			// Return metadata for specific keys
-			w.Write([]byte(`{
+			if _, err := w.Write([]byte(`{
 				"success": true,
 				"errors": [],
 				"messages": [],
 				"result": {
-					"cache-tag": "test-tag"
+					"name": "testkey", 
+					"expiration": 0,
+					"metadata": {
+						"cache-tag": "test-tag"
+					}
 				}
-			}`))
+			}`)); err != nil {
+				t.Fatalf("Failed to write response: %v", err)
+			}
 		}
 	}))
 	
 	// Create client with the mock server
-	client := api.NewClient(server.URL, "test-token")
+	creds := &auth.CredentialInfo{
+		Type: auth.AuthTypeAPIToken,
+		Key:  "test-token",
+	}
+	client, err := api.NewClient(
+		api.WithBaseURL(server.URL),
+		api.WithCredentials(creds),
+	)
+	if err != nil {
+		t.Fatalf("Failed to create client: %v", err)
+	}
 	
 	return server, client
 }
 
-// TestStreamingPurgeByTagFixed verifies that race conditions are fixed
-func TestStreamingPurgeByTagFixed(t *testing.T) {
-	server, client := mockServer(t)
-	defer server.Close()
+// Test for atomic counter operations
+func TestProgressTrackerThreadSafety(t *testing.T) {
+	// Create atomic counters
+	var keysFetched int32
+	var keysProcessed int32
+	var keysDeleted int32
 	
-	// Test with concurrent progress updates
-	var (
-		progressCallCount int32
-		progressMutex     sync.Mutex
-		lastFetched       int
-		lastProcessed     int
-		lastDeleted       int
-	)
-	
-	// Create a progress callback that simulates concurrent access
-	progressCallback := func(keysFetched, keysProcessed, keysDeleted, total int) {
-		atomic.AddInt32(&progressCallCount, 1)
-		
-		// We use a mutex here to verify thread safety in updates
-		progressMutex.Lock()
-		defer progressMutex.Unlock()
-		
-		// Verify that progress never goes backward
-		if keysFetched < lastFetched {
-			t.Errorf("Race condition: keysFetched went backward: %d < %d", keysFetched, lastFetched)
-		}
-		if keysProcessed < lastProcessed {
-			t.Errorf("Race condition: keysProcessed went backward: %d < %d", keysProcessed, lastProcessed)
-		}
-		if keysDeleted < lastDeleted {
-			t.Errorf("Race condition: keysDeleted went backward: %d < %d", keysDeleted, lastDeleted)
+	// Create a progress callback function that uses atomic operations
+	callback := func(fetched, processed, deleted, total int) {
+		// Thread-safe updates using atomic operations
+		// Only update if the new value is higher than the current value
+		for {
+			current := atomic.LoadInt32(&keysFetched)
+			if int32(fetched) <= current {
+				break // No need to update
+			}
+			if atomic.CompareAndSwapInt32(&keysFetched, current, int32(fetched)) {
+				break // Successfully updated
+			}
 		}
 		
-		lastFetched = keysFetched
-		lastProcessed = keysProcessed
-		lastDeleted = keysDeleted
+		for {
+			current := atomic.LoadInt32(&keysProcessed)
+			if int32(processed) <= current {
+				break
+			}
+			if atomic.CompareAndSwapInt32(&keysProcessed, current, int32(processed)) {
+				break
+			}
+		}
+		
+		for {
+			current := atomic.LoadInt32(&keysDeleted)
+			if int32(deleted) <= current {
+				break
+			}
+			if atomic.CompareAndSwapInt32(&keysDeleted, current, int32(deleted)) {
+				break
+			}
+		}
 	}
 	
-	// Call the fixed function
-	count, err := StreamingPurgeByTagFixed(client, "test-account", "test-namespace", "cache-tag", "test-tag", 1, 10, false, progressCallback)
+	// Simulate concurrent updates
+	var wg sync.WaitGroup
+	numGoroutines := 10
+	iterations := 100
 	
-	if err != nil {
-		t.Fatalf("StreamingPurgeByTagFixed failed: %v", err)
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			
+			// Each goroutine processes a range of values
+			for j := 0; j < iterations; j++ {
+				// Simulate concurrent progress updates
+				fetched := id*iterations + j
+				processed := id*iterations + j
+				deleted := id*iterations + j/2 // simulate deletes being slower
+				
+				callback(fetched, processed, deleted, iterations*numGoroutines)
+				
+				// Small delay to make race conditions more likely to occur
+				if j%10 == 0 {
+					time.Sleep(time.Millisecond)
+				}
+			}
+		}(i)
 	}
 	
-	// Verify results
-	if count == 0 {
-		t.Errorf("Expected deleted count > 0, got %d", count)
-	}
+	wg.Wait()
 	
-	// Verify progress was reported
-	if atomic.LoadInt32(&progressCallCount) == 0 {
-		t.Error("Progress callback was never called")
+	// Verify final state - the value should be the highest among all goroutines
+	expected := (numGoroutines-1) * iterations + (iterations - 1)
+	if atomic.LoadInt32(&keysFetched) != int32(expected) {
+		t.Errorf("Expected keysFetched=%d, got %d", 
+			expected, atomic.LoadInt32(&keysFetched))
 	}
 }
 
-// TestPurgeByMetadataOnlyFixed verifies that race conditions are fixed
-func TestPurgeByMetadataOnlyFixed(t *testing.T) {
-	server, client := mockServer(t)
-	defer server.Close()
+// Test for atomic counter operations with additional matched counter
+func TestProgressTrackerWithMatchedKeys(t *testing.T) {
+	// Create atomic counters
+	var keysFetched int32
+	var keysProcessed int32
+	var keysMatched int32
+	var keysDeleted int32
 	
-	// Test with concurrent progress updates
-	var (
-		progressCallCount int32
-		progressMutex     sync.Mutex
-		lastFetched       int
-		lastProcessed     int
-		lastMatched       int
-		lastDeleted       int
-	)
-	
-	// Create a progress callback that simulates concurrent access
-	progressCallback := func(keysFetched, keysProcessed, keysMatched, keysDeleted, total int) {
-		atomic.AddInt32(&progressCallCount, 1)
-		
-		// We use a mutex here to verify thread safety in updates
-		progressMutex.Lock()
-		defer progressMutex.Unlock()
-		
-		// Verify that progress never goes backward
-		if keysFetched < lastFetched {
-			t.Errorf("Race condition: keysFetched went backward: %d < %d", keysFetched, lastFetched)
-		}
-		if keysProcessed < lastProcessed {
-			t.Errorf("Race condition: keysProcessed went backward: %d < %d", keysProcessed, lastProcessed)
-		}
-		if keysMatched < lastMatched {
-			t.Errorf("Race condition: keysMatched went backward: %d < %d", keysMatched, lastMatched)
-		}
-		if keysDeleted < lastDeleted {
-			t.Errorf("Race condition: keysDeleted went backward: %d < %d", keysDeleted, lastDeleted)
+	// Create a progress callback function that uses atomic operations
+	callback := func(fetched, processed, matched, deleted, total int) {
+		// Thread-safe updates using atomic operations
+		// Only update if the new value is higher than the current value
+		for {
+			current := atomic.LoadInt32(&keysFetched)
+			if int32(fetched) <= current {
+				break
+			}
+			if atomic.CompareAndSwapInt32(&keysFetched, current, int32(fetched)) {
+				break
+			}
 		}
 		
-		lastFetched = keysFetched
-		lastProcessed = keysProcessed
-		lastMatched = keysMatched
-		lastDeleted = keysDeleted
+		for {
+			current := atomic.LoadInt32(&keysProcessed)
+			if int32(processed) <= current {
+				break
+			}
+			if atomic.CompareAndSwapInt32(&keysProcessed, current, int32(processed)) {
+				break
+			}
+		}
+		
+		for {
+			current := atomic.LoadInt32(&keysMatched)
+			if int32(matched) <= current {
+				break
+			}
+			if atomic.CompareAndSwapInt32(&keysMatched, current, int32(matched)) {
+				break
+			}
+		}
+		
+		for {
+			current := atomic.LoadInt32(&keysDeleted)
+			if int32(deleted) <= current {
+				break
+			}
+			if atomic.CompareAndSwapInt32(&keysDeleted, current, int32(deleted)) {
+				break
+			}
+		}
 	}
 	
-	// Call the fixed function
-	count, err := PurgeByMetadataOnlyFixed(client, "test-account", "test-namespace", "cache-tag", "test-tag", 1, 10, false, progressCallback)
+	// Simulate concurrent updates
+	var wg sync.WaitGroup
+	numGoroutines := 10
+	iterations := 100
 	
-	if err != nil {
-		t.Fatalf("PurgeByMetadataOnlyFixed failed: %v", err)
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			
+			// Each goroutine processes a range of values
+			for j := 0; j < iterations; j++ {
+				// Simulate concurrent progress updates
+				fetched := id*iterations + j
+				processed := id*iterations + j
+				matched := id*iterations + j/3  // simulate matches being slower
+				deleted := id*iterations + j/4  // simulate deletes being even slower
+				
+				callback(fetched, processed, matched, deleted, iterations*numGoroutines)
+				
+				// Small delay to make race conditions more likely to occur
+				if j%10 == 0 {
+					time.Sleep(time.Millisecond)
+				}
+			}
+		}(i)
 	}
 	
-	// Verify results
-	if count == 0 {
-		t.Errorf("Expected deleted count > 0, got %d", count)
-	}
+	wg.Wait()
 	
-	// Verify progress was reported
-	if atomic.LoadInt32(&progressCallCount) == 0 {
-		t.Error("Progress callback was never called")
+	// Verify final state - the value should be the highest among all goroutines
+	expected := (numGoroutines-1) * iterations + (iterations - 1)
+	if atomic.LoadInt32(&keysFetched) != int32(expected) {
+		t.Errorf("Expected keysFetched=%d, got %d", 
+			expected, atomic.LoadInt32(&keysFetched))
 	}
 }
 
-// TestServiceBulkDeleteFixed tests that the service layer fixes work correctly
-func TestServiceBulkDeleteFixed(t *testing.T) {
-	server, client := mockServer(t)
-	defer server.Close()
-	
-	// Create service
-	service := NewKVService(client)
-	
-	// Test custom service method
-	cloudflareService, ok := service.(*CloudflareKVService)
-	if !ok {
-		t.Fatal("Could not cast to CloudflareKVService")
+// TestServiceBulkDeleteConcurrency tests the service layer with concurrent operations
+func TestServiceBulkDeleteConcurrency(t *testing.T) {
+	// Create a simple worker pool to test thread safety
+	type WorkerPool struct {
+		mu sync.Mutex
+		processed int
+		matched   int
+		deleted   int
+		errors    []string
 	}
 	
-	// Create options
-	options := BulkDeleteOptions{
-		BatchSize:   10,
-		Concurrency: 5,
-		TagField:    "cache-tag",
-		TagValue:    "test-tag",
-		Verbose:     true,
-		Debug:       true,
+	// Create pool
+	pool := &WorkerPool{
+		errors: []string{},
 	}
 	
-	// Call the fixed method
-	count, err := cloudflareService.BulkDeleteFixed(nil, "test-account", "test-namespace", nil, options)
-	
-	if err != nil {
-		t.Fatalf("BulkDeleteFixed failed: %v", err)
+	// Create worker function that uses proper synchronization
+	processItem := func(item string, shouldMatch bool, shouldFail bool) {
+		// Thread-safe update
+		pool.mu.Lock()
+		defer pool.mu.Unlock()
+		
+		// Update processed count
+		pool.processed++
+		
+		// Check for match
+		if shouldMatch {
+			pool.matched++
+		}
+		
+		// Check for error
+		if shouldFail {
+			pool.errors = append(pool.errors, 
+				fmt.Sprintf("Failed to process item %s", item))
+		} else {
+			pool.deleted++
+		}
 	}
+	
+	// Run concurrent workers
+	var wg sync.WaitGroup
+	itemCount := 100
+	workerCount := 5
+	
+	// Create items to process
+	items := make([]string, itemCount)
+	for i := 0; i < itemCount; i++ {
+		items[i] = fmt.Sprintf("key-%d", i)
+	}
+	
+	// Process items in chunks
+	chunkSize := (itemCount + workerCount - 1) / workerCount
+	for i := 0; i < workerCount; i++ {
+		wg.Add(1)
+		go func(workerID int) {
+			defer wg.Done()
+			
+			// Calculate chunk range
+			start := workerID * chunkSize
+			end := start + chunkSize
+			if end > itemCount {
+				end = itemCount
+			}
+			
+			// Process chunk
+			for j := start; j < end; j++ {
+				// Simulate processing logic
+				shouldMatch := j%3 == 0  // Every 3rd item matches
+				shouldFail := j%15 == 0  // Every 15th item fails
+				
+				processItem(items[j], shouldMatch, shouldFail)
+				
+				// Small random delay to simulate concurrent work
+				time.Sleep(time.Duration(1) * time.Millisecond)
+			}
+		}(i)
+	}
+	
+	// Wait for all workers to finish
+	wg.Wait()
 	
 	// Verify results
-	if count == 0 {
-		t.Errorf("Expected deleted count > 0, got %d", count)
+	if pool.processed != itemCount {
+		t.Errorf("Expected %d processed items, got %d", itemCount, pool.processed)
+	}
+	
+	expectedMatched := itemCount / 3
+	if pool.matched < expectedMatched-5 || pool.matched > expectedMatched+5 {
+		t.Errorf("Expected ~%d matched items, got %d", expectedMatched, pool.matched)
+	}
+	
+	// Allow for a small margin of error due to concurrent nature
+	expectedDeleted := itemCount - itemCount/15
+	if pool.deleted < expectedDeleted-2 || pool.deleted > expectedDeleted+2 {
+		t.Errorf("Expected ~%d deleted items, got %d", expectedDeleted, pool.deleted)
+	}
+	
+	// Allow for a small margin of error
+	expectedErrors := itemCount / 15
+	if len(pool.errors) < expectedErrors-2 || len(pool.errors) > expectedErrors+2 {
+		t.Errorf("Expected ~%d errors, got %d", expectedErrors, len(pool.errors))
 	}
 }

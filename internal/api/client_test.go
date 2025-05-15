@@ -54,7 +54,9 @@ func TestRequest(t *testing.T) {
 		// Return a simple JSON response
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"success": true, "result": {"id": "123"}}`))
+		if _, err := w.Write([]byte(`{"success": true, "result": {"id": "123"}}`)); err != nil {
+			t.Fatalf("Failed to write response: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -151,7 +153,9 @@ func TestURLBuilding(t *testing.T) {
 			}
 			
 			// Make a request to capture the URL
-			client.Request("GET", tc.path, nil, nil)
+			if _, err := client.Request("GET", tc.path, nil, nil); err != nil {
+				t.Fatalf("Request failed: %v", err)
+			}
 			
 			// Check the URL
 			if capturedURL != tc.expected {
