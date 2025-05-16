@@ -49,7 +49,7 @@ func NewClient(options ...ClientOption) (*Client, error) {
 	client := &Client{
 		BaseURL: "https://api.cloudflare.com/client/v4",
 		HTTPClient: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout: 300 * time.Second, // Increased from 30s to 300s to handle large operations
 		},
 	}
 
