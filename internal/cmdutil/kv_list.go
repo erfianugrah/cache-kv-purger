@@ -34,6 +34,7 @@ func NewKVListCommand() *CommandBuilder {
 		outputJSON  bool
 		verbose     bool
 		debug       bool
+		all         bool
 	}
 
 	// Create command
@@ -98,6 +99,8 @@ When used with --namespace-id or --namespace, lists keys in the specified namesp
 		"verbose", false, "Enable verbose output", &opts.verbose,
 	).WithBoolFlag(
 		"debug", false, "Enable debug output", &opts.debug,
+	).WithBoolFlag(
+		"all", false, "Fetch all keys (automatically handle pagination)", &opts.all,
 	).WithRunE(
 		WithConfigAndClient(func(cmd *cobra.Command, args []string, cfg *config.Config, client *api.Client) error {
 			// Resolve account ID
@@ -295,18 +298,32 @@ When used with --namespace-id or --namespace, lists keys in the specified namesp
 			}
 
 			// List keys
-			result, err := service.List(cmd.Context(), accountID, opts.namespaceID, listOptions)
-			if err != nil {
-				return fmt.Errorf("failed to list keys: %w", err)
+			var keys []kv.KeyValuePair
+			var hasMore bool
+			var currentCursor string
+
+			if opts.all {
+				keys, err = service.ListAll(cmd.Context(), accountID, opts.namespaceID, listOptions)
+				if err != nil {
+					return fmt.Errorf("failed to list keys: %w", err)
+				}
+			} else {
+				result, err := service.List(cmd.Context(), accountID, opts.namespaceID, listOptions)
+				if err != nil {
+					return fmt.Errorf("failed to list keys: %w", err)
+				}
+				keys = result.Keys
+				hasMore = result.Cursor != ""
+				currentCursor = result.Cursor
 			}
 
 			// Display results
 			if opts.outputJSON {
-				return common.OutputJSON(result)
+				return common.OutputJSON(keys)
 			}
 
 			// Table format
-			fmt.Printf("Keys in namespace (%d):\n", len(result.Keys))
+			fmt.Printf("Keys in namespace (%d):\n", len(keys))
 
 			// Prepare table data
 			var headers []string
@@ -314,9 +331,9 @@ When used with --namespace-id or --namespace, lists keys in the specified namesp
 
 			if opts.metadata {
 				headers = []string{"Key", "Expiration", "Metadata"}
-				rows = make([][]string, len(result.Keys))
+				rows = make([][]string, len(keys))
 
-				for i, key := range result.Keys {
+				for i, key := range keys {
 					expStr := ""
 					if key.Expiration > 0 {
 						expStr = fmt.Sprintf("%d", key.Expiration)
@@ -331,9 +348,9 @@ When used with --namespace-id or --namespace, lists keys in the specified namesp
 				}
 			} else {
 				headers = []string{"Key", "Expiration"}
-				rows = make([][]string, len(result.Keys))
+				rows = make([][]string, len(keys))
 
-				for i, key := range result.Keys {
+				for i, key := range keys {
 					expStr := ""
 					if key.Expiration > 0 {
 						expStr = fmt.Sprintf("%d", key.Expiration)
@@ -345,12 +362,12 @@ When used with --namespace-id or --namespace, lists keys in the specified namesp
 			common.FormatTable(headers, rows)
 
 			// Include note about metadata if appropriate
-			if !opts.metadata && len(result.Keys) > 0 {
+			if !opts.metadata && len(keys) > 0 {
 				fmt.Println("\nTip: Use --metadata to see metadata information")
 			}
 
-			if result.Cursor != "" {
-				fmt.Printf("\nMore keys available. Use --cursor '%s' to see the next page.\n", result.Cursor)
+			if hasMore && !opts.all {
+				fmt.Printf("\nMore keys available. Use --cursor '%s' to see the next page, or use --all to fetch all keys.\n", currentCursor)
 			}
 
 			return nil

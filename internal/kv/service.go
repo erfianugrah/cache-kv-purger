@@ -23,6 +23,7 @@ type KVService interface {
 
 	// Basic operations
 	List(ctx context.Context, accountID, namespaceID string, options ListOptions) (*ListKeysResult, error)
+	ListAll(ctx context.Context, accountID, namespaceID string, options ListOptions) ([]KeyValuePair, error)
 	Get(ctx context.Context, accountID, namespaceID, key string, options ServiceGetOptions) (*KeyValuePair, error)
 	Put(ctx context.Context, accountID, namespaceID, key, value string, options WriteOptions) error
 	Delete(ctx context.Context, accountID, namespaceID, key string) error
@@ -202,6 +203,24 @@ func (s *CloudflareKVService) List(ctx context.Context, accountID, namespaceID s
 	}
 
 	return ListKeysWithOptions(s.client, accountID, namespaceID, listOptions)
+}
+
+// ListAll lists all keys in a KV namespace, automatically handling pagination
+func (s *CloudflareKVService) ListAll(ctx context.Context, accountID, namespaceID string, options ListOptions) ([]KeyValuePair, error) {
+	// Convert options to the format expected by the existing function
+	listOptions := &ListKeysOptions{
+		Limit:  options.Limit,
+		Cursor: options.Cursor,
+		Prefix: options.Prefix,
+	}
+
+	// If limit is not set, use the maximum allowed by the API
+	if listOptions.Limit == 0 {
+		listOptions.Limit = 1000
+	}
+
+	// Use the existing ListAllKeysWithOptions function which handles pagination
+	return ListAllKeysWithOptions(s.client, accountID, namespaceID, listOptions, nil)
 }
 
 // Get gets a value for a key
