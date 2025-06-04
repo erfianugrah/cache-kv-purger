@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"strings"
 
 	"cache-kv-purger/internal/api"
 )
@@ -195,7 +196,17 @@ func (s *CloudflareKVService) ResolveNamespaceID(ctx context.Context, accountID,
 
 // List lists keys in a KV namespace
 func (s *CloudflareKVService) List(ctx context.Context, accountID, namespaceID string, options ListOptions) (*ListKeysResult, error) {
-	// Convert options to the format expected by the existing function
+	// Use enhanced list for better performance when metadata is requested
+	if options.IncludeMetadata {
+		return ListKeysEnhanced(s.client, accountID, namespaceID, &EnhancedListOptions{
+			Prefix:          options.Prefix,
+			Limit:           options.Limit,
+			Cursor:          options.Cursor,
+			IncludeMetadata: true,
+		})
+	}
+	
+	// Use regular list when metadata is not needed
 	listOptions := &ListKeysOptions{
 		Limit:  options.Limit,
 		Cursor: options.Cursor,
@@ -207,38 +218,46 @@ func (s *CloudflareKVService) List(ctx context.Context, accountID, namespaceID s
 
 // ListAll lists all keys in a KV namespace, automatically handling pagination
 func (s *CloudflareKVService) ListAll(ctx context.Context, accountID, namespaceID string, options ListOptions) ([]KeyValuePair, error) {
-	// Convert options to the format expected by the existing function
-	listOptions := &ListKeysOptions{
-		Limit:  options.Limit,
-		Cursor: options.Cursor,
-		Prefix: options.Prefix,
-	}
-
 	// If limit is not set, use the maximum allowed by the API
-	if listOptions.Limit == 0 {
-		listOptions.Limit = 1000
+	if options.Limit == 0 {
+		options.Limit = 1000
 	}
 
-	// Use the existing ListAllKeysWithOptions function which handles pagination
-	return ListAllKeysWithOptions(s.client, accountID, namespaceID, listOptions, nil)
+	// Use parallel pagination for better performance
+	return ParallelListAllKeys(s.client, accountID, namespaceID, &ParallelListOptions{
+		Prefix:           options.Prefix,
+		BatchSize:        options.Limit,
+		ParallelRequests: 5, // Fetch up to 5 pages concurrently
+		IncludeMetadata:  options.IncludeMetadata,
+		Context:          ctx,
+	})
 }
 
 // Get gets a value for a key
 func (s *CloudflareKVService) Get(ctx context.Context, accountID, namespaceID, key string, options ServiceGetOptions) (*KeyValuePair, error) {
-	if options.IncludeMetadata {
-		return GetKeyWithMetadata(s.client, accountID, namespaceID, key)
-	}
-
-	// Just get the value without metadata
+	// Always get the value first
 	value, err := GetValue(s.client, accountID, namespaceID, key)
 	if err != nil {
 		return nil, err
 	}
 
-	return &KeyValuePair{
+	result := &KeyValuePair{
 		Key:   key,
 		Value: value,
-	}, nil
+	}
+
+	// If metadata is requested, use cached version for better performance
+	if options.IncludeMetadata {
+		metadata, err := CachedGetKeyMetadata(s.client, accountID, namespaceID, key)
+		if err != nil {
+			// Metadata is optional, so we don't fail the entire request
+			// Just return the value without metadata
+			return result, nil
+		}
+		result.Metadata = metadata
+	}
+
+	return result, nil
 }
 
 // Put puts a value for a key
@@ -258,8 +277,46 @@ func (s *CloudflareKVService) Exists(ctx context.Context, accountID, namespaceID
 
 // BulkGet gets multiple values in bulk
 func (s *CloudflareKVService) BulkGet(ctx context.Context, accountID, namespaceID string, keys []string, options BulkGetOptions) ([]KeyValuePair, error) {
-	// This is a more complex operation that needs to be implemented
-	// For now, we'll just get each key individually
+	// Use optimized bulk metadata fetching if metadata is requested
+	if options.IncludeMetadata {
+		// Get metadata in bulk using cached function
+		metadataMap, err := CachedBulkGetMetadata(s.client, accountID, namespaceID, keys)
+		if err != nil {
+			// Fallback to individual fetching on error
+			return s.bulkGetIndividual(ctx, accountID, namespaceID, keys, options)
+		}
+		
+		// Now get values and combine with metadata
+		result := make([]KeyValuePair, 0, len(keys))
+		for _, key := range keys {
+			value, err := GetValue(s.client, accountID, namespaceID, key)
+			if err != nil {
+				// Skip keys that don't exist or have errors
+				continue
+			}
+			
+			kvp := KeyValuePair{
+				Key:   key,
+				Value: value,
+			}
+			
+			// Add metadata if available
+			if metadata, exists := metadataMap[key]; exists {
+				kvp.Metadata = metadata
+			}
+			
+			result = append(result, kvp)
+		}
+		
+		return result, nil
+	}
+	
+	// For non-metadata requests, use individual fetching
+	return s.bulkGetIndividual(ctx, accountID, namespaceID, keys, options)
+}
+
+// bulkGetIndividual is a helper method for individual key fetching
+func (s *CloudflareKVService) bulkGetIndividual(ctx context.Context, accountID, namespaceID string, keys []string, options BulkGetOptions) ([]KeyValuePair, error) {
 	result := make([]KeyValuePair, 0, len(keys))
 
 	for _, key := range keys {
@@ -471,14 +528,79 @@ func (s *CloudflareKVService) bulkDeleteWithAdvancedFiltering(ctx context.Contex
 // Search searches for keys with specific criteria
 func (s *CloudflareKVService) Search(ctx context.Context, accountID, namespaceID string, options SearchOptions) ([]KeyValuePair, error) {
 	if options.SearchValue != "" {
-		// Use smart search
-		return SmartFindKeysWithValue(s.client, accountID, namespaceID, options.SearchValue,
-			options.BatchSize, options.Concurrency, nil)
+		// Use optimized search with metadata fetching in single API call
+		var matchedKeys []KeyValuePair
+		
+		// Set defaults
+		if options.BatchSize <= 0 {
+			options.BatchSize = 1000
+		}
+		if options.Concurrency <= 0 {
+			options.Concurrency = 10
+		}
+		
+		// List all keys with metadata included (this is the optimization)
+		listOpts := &ListKeysOptions{
+			Limit: options.BatchSize,
+		}
+		
+		cursor := ""
+		for {
+			listOpts.Cursor = cursor
+			
+			// Use enhanced list that includes metadata in response
+			result, err := ListKeysEnhanced(s.client, accountID, namespaceID, &EnhancedListOptions{
+				Cursor:          cursor,
+				Limit:           options.BatchSize,
+				IncludeMetadata: true,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("failed to list keys: %w", err)
+			}
+			
+			// Check each key for matches
+			for _, key := range result.Keys {
+				if matchesSearchValue(key, options.SearchValue) {
+					matchedKeys = append(matchedKeys, key)
+				}
+			}
+			
+			// Check if there are more pages
+			if !result.HasMore {
+				break
+			}
+			cursor = result.Cursor
+		}
+		
+		return matchedKeys, nil
 	} else if options.TagField != "" {
-		// Use tag-based search
-		return StreamingFilterKeysByMetadata(s.client, accountID, namespaceID, options.TagField,
-			options.TagValue, options.BatchSize, options.Concurrency, nil)
+		// Use the existing enhanced filter for tag-based search
+		enhancedOpts := &EnhancedSearchOptions{
+			TagField:        options.TagField,
+			TagValue:        options.TagValue,
+			IncludeMetadata: true,
+			BatchSize:       options.BatchSize,
+			Concurrency:     options.Concurrency,
+		}
+		return EnhancedStreamingFilterKeysByMetadata(s.client, accountID, namespaceID, 
+			options.TagField, options.TagValue, enhancedOpts, nil)
 	}
 
 	return nil, fmt.Errorf("search requires either SearchValue or TagField to be specified")
 }
+
+// matchesSearchValue checks if a key matches the search value
+func matchesSearchValue(key KeyValuePair, searchValue string) bool {
+	// Check key name
+	if strings.Contains(key.Key, searchValue) {
+		return true
+	}
+	
+	// Check metadata if available
+	if key.Metadata != nil {
+		return searchInMetadata(key.Metadata, searchValue)
+	}
+	
+	return false
+}
+

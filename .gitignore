@@ -1,2 +1,36 @@
 
+# Binaries
+cache-kv-purger
+cache-kv-purger-*
+*.exe
+
+# Test binaries
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# Dependency directories
+vendor/
+
+# Go workspace file
+go.work
+
+# IDE specific files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+# Local configuration
 **/CLAUDE.local.md
+
+# Temporary files
+*.tmp
+*.bak
+*.log
