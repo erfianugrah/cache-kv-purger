@@ -44,13 +44,14 @@ A command-line interface tool for managing Cloudflare cache purging and Workers 
   - **NEW** Support for both single and bulk operations in the same commands
   - **NEW** Namespace resolution by name or ID without explicit lookups
 
-- **Performance Optimizations**
+- **Performance Optimizations** (Fully Integrated)
   - **High-Performance HTTP Client**: Connection pooling with keep-alive, ~13x faster concurrent operations
   - **Bulk Metadata Fetching**: Single API call for keys with metadata, 100-1000x fewer API calls
   - **Streaming JSON Parser**: Constant memory usage for millions of keys
   - **Parallel Pagination**: Concurrent page fetching for faster list operations
   - **Request Caching**: LRU cache eliminates redundant metadata lookups
   - **Optimized Batching**: No artificial delays, ~55x faster export operations
+  - **All KV operations now use optimized implementations**: List, Search, Get, and Delete operations automatically leverage these optimizations
 
 - **Combined API Operations**
   - Execute operations across multiple Cloudflare APIs in one command

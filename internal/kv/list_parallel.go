@@ -141,13 +141,20 @@ func ParallelListAllKeys(client *api.Client, accountID, namespaceID string, opti
 	allKeys := make([]KeyValuePair, 0, firstResult.TotalCount)
 	allKeys = append(allKeys, firstResult.Keys...)
 	
+	var mu sync.Mutex
 	pagesReceived := 1
 	expectedPages := estimatedPages
 	
 	// Close work channel when done
 	go func() {
 		// Wait for all pages to be processed
-		for pagesReceived < expectedPages {
+		for {
+			mu.Lock()
+			if pagesReceived >= expectedPages {
+				mu.Unlock()
+				break
+			}
+			mu.Unlock()
 			time.Sleep(10 * time.Millisecond)
 		}
 		close(workChan)
@@ -166,12 +173,15 @@ func ParallelListAllKeys(client *api.Client, accountID, namespaceID string, opti
 		}
 		
 		pageMap[result.pageNum] = result.keys
+		
+		mu.Lock()
 		pagesReceived++
 		
 		// If we know this is the last page, update expected count
 		if result.cursor == "" {
 			expectedPages = result.pageNum
 		}
+		mu.Unlock()
 	}
 	
 	// Assemble results in order

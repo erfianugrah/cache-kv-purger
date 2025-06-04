@@ -65,7 +65,7 @@ jobs:
         cache: true
 
     - name: Run tests
-      run: go test -v ./...
+      run: go test -v -race -timeout=5m ./...
 
   lint:
     name: Lint
