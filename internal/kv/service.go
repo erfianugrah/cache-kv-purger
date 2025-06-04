@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"strings"
 
 	"cache-kv-purger/internal/api"
 )
@@ -471,14 +472,79 @@ func (s *CloudflareKVService) bulkDeleteWithAdvancedFiltering(ctx context.Contex
 // Search searches for keys with specific criteria
 func (s *CloudflareKVService) Search(ctx context.Context, accountID, namespaceID string, options SearchOptions) ([]KeyValuePair, error) {
 	if options.SearchValue != "" {
-		// Use smart search
-		return SmartFindKeysWithValue(s.client, accountID, namespaceID, options.SearchValue,
-			options.BatchSize, options.Concurrency, nil)
+		// Use optimized search with metadata fetching in single API call
+		var matchedKeys []KeyValuePair
+		
+		// Set defaults
+		if options.BatchSize <= 0 {
+			options.BatchSize = 1000
+		}
+		if options.Concurrency <= 0 {
+			options.Concurrency = 10
+		}
+		
+		// List all keys with metadata included (this is the optimization)
+		listOpts := &ListKeysOptions{
+			Limit: options.BatchSize,
+		}
+		
+		cursor := ""
+		for {
+			listOpts.Cursor = cursor
+			
+			// Use enhanced list that includes metadata in response
+			result, err := ListKeysEnhanced(s.client, accountID, namespaceID, &EnhancedListOptions{
+				Cursor:          cursor,
+				Limit:           options.BatchSize,
+				IncludeMetadata: true,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("failed to list keys: %w", err)
+			}
+			
+			// Check each key for matches
+			for _, key := range result.Keys {
+				if matchesSearchValue(key, options.SearchValue) {
+					matchedKeys = append(matchedKeys, key)
+				}
+			}
+			
+			// Check if there are more pages
+			if !result.HasMore {
+				break
+			}
+			cursor = result.Cursor
+		}
+		
+		return matchedKeys, nil
 	} else if options.TagField != "" {
-		// Use tag-based search
-		return StreamingFilterKeysByMetadata(s.client, accountID, namespaceID, options.TagField,
-			options.TagValue, options.BatchSize, options.Concurrency, nil)
+		// Use the existing enhanced filter for tag-based search
+		enhancedOpts := &EnhancedSearchOptions{
+			TagField:        options.TagField,
+			TagValue:        options.TagValue,
+			IncludeMetadata: true,
+			BatchSize:       options.BatchSize,
+			Concurrency:     options.Concurrency,
+		}
+		return EnhancedStreamingFilterKeysByMetadata(s.client, accountID, namespaceID, 
+			options.TagField, options.TagValue, enhancedOpts, nil)
 	}
 
 	return nil, fmt.Errorf("search requires either SearchValue or TagField to be specified")
 }
+
+// matchesSearchValue checks if a key matches the search value
+func matchesSearchValue(key KeyValuePair, searchValue string) bool {
+	// Check key name
+	if strings.Contains(key.Key, searchValue) {
+		return true
+	}
+	
+	// Check metadata if available
+	if key.Metadata != nil {
+		return searchInMetadata(key.Metadata, searchValue)
+	}
+	
+	return false
+}
+
