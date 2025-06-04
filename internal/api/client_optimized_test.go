@@ -9,6 +9,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+	
+	"cache-kv-purger/internal/auth"
 )
 
 // TestConnectionPooling verifies that the optimized client performs better
@@ -27,7 +29,14 @@ func TestConnectionPooling(t *testing.T) {
 	
 	// Test regular client
 	t.Run("RegularClient", func(t *testing.T) {
-		client, err := NewClient(WithBaseURL(server.URL))
+		client, err := NewClient(
+			WithBaseURL(server.URL),
+			WithCredentials(&auth.CredentialInfo{
+				Type:  auth.AuthTypeAPIToken,
+				Key:   "test-token",
+				Email: "test@example.com",
+			}),
+		)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -46,7 +55,14 @@ func TestConnectionPooling(t *testing.T) {
 	
 	// Test optimized client
 	t.Run("OptimizedClient", func(t *testing.T) {
-		client, err := NewOptimizedClient(WithOptimizedBaseURL(server.URL))
+		client, err := NewOptimizedClient(
+			WithOptimizedBaseURL(server.URL),
+			WithOptimizedCredentials(&auth.CredentialInfo{
+				Type:  auth.AuthTypeAPIToken,
+				Key:   "test-token",
+				Email: "test@example.com",
+			}),
+		)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -86,7 +102,14 @@ func TestConcurrentRequests(t *testing.T) {
 	
 	// Test optimized client with concurrent requests
 	t.Run("OptimizedClientConcurrent", func(t *testing.T) {
-		client, err := NewOptimizedClient(WithOptimizedBaseURL(server.URL))
+		client, err := NewOptimizedClient(
+			WithOptimizedBaseURL(server.URL),
+			WithOptimizedCredentials(&auth.CredentialInfo{
+				Type:  auth.AuthTypeAPIToken,
+				Key:   "test-token",
+				Email: "test@example.com",
+			}),
+		)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -146,7 +169,14 @@ func TestRetryLogic(t *testing.T) {
 	t.Run("RetryOnServerError", func(t *testing.T) {
 		atomic.StoreInt32(&attemptCount, 0)
 		
-		client, err := NewOptimizedClient(WithOptimizedBaseURL(server.URL))
+		client, err := NewOptimizedClient(
+			WithOptimizedBaseURL(server.URL),
+			WithOptimizedCredentials(&auth.CredentialInfo{
+				Type:  auth.AuthTypeAPIToken,
+				Key:   "test-token",
+				Email: "test@example.com",
+			}),
+		)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -194,6 +224,11 @@ func TestRateLimitHandling(t *testing.T) {
 		client, err := NewOptimizedClient(
 			WithOptimizedBaseURL(server.URL),
 			WithOptimizedTimeout(10*time.Second),
+			WithOptimizedCredentials(&auth.CredentialInfo{
+				Type:  auth.AuthTypeAPIToken,
+				Key:   "test-token",
+				Email: "test@example.com",
+			}),
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -231,7 +266,14 @@ func TestContextCancellation(t *testing.T) {
 	defer server.Close()
 	
 	t.Run("CancelRequest", func(t *testing.T) {
-		client, err := NewOptimizedClient(WithOptimizedBaseURL(server.URL))
+		client, err := NewOptimizedClient(
+			WithOptimizedBaseURL(server.URL),
+			WithOptimizedCredentials(&auth.CredentialInfo{
+				Type:  auth.AuthTypeAPIToken,
+				Key:   "test-token",
+				Email: "test@example.com",
+			}),
+		)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -266,7 +308,14 @@ func BenchmarkClientComparison(b *testing.B) {
 	defer server.Close()
 	
 	b.Run("RegularClient", func(b *testing.B) {
-		client, err := NewClient(WithBaseURL(server.URL))
+		client, err := NewClient(
+			WithBaseURL(server.URL),
+			WithCredentials(&auth.CredentialInfo{
+				Type:  auth.AuthTypeAPIToken,
+				Key:   "test-token",
+				Email: "test@example.com",
+			}),
+		)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -281,7 +330,14 @@ func BenchmarkClientComparison(b *testing.B) {
 	})
 	
 	b.Run("OptimizedClient", func(b *testing.B) {
-		client, err := NewOptimizedClient(WithOptimizedBaseURL(server.URL))
+		client, err := NewOptimizedClient(
+			WithOptimizedBaseURL(server.URL),
+			WithOptimizedCredentials(&auth.CredentialInfo{
+				Type:  auth.AuthTypeAPIToken,
+				Key:   "test-token",
+				Email: "test@example.com",
+			}),
+		)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -297,7 +353,14 @@ func BenchmarkClientComparison(b *testing.B) {
 	})
 	
 	b.Run("OptimizedClientConcurrent", func(b *testing.B) {
-		client, err := NewOptimizedClient(WithOptimizedBaseURL(server.URL))
+		client, err := NewOptimizedClient(
+			WithOptimizedBaseURL(server.URL),
+			WithOptimizedCredentials(&auth.CredentialInfo{
+				Type:  auth.AuthTypeAPIToken,
+				Key:   "test-token",
+				Email: "test@example.com",
+			}),
+		)
 		if err != nil {
 			b.Fatal(err)
 		}
