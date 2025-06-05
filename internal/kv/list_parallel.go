@@ -81,6 +81,7 @@ func ParallelListAllKeys(client *api.Client, accountID, namespaceID string, opti
 	
 	workChan := make(chan pageWork, estimatedPages)
 	resultChan := make(chan pageResult, estimatedPages)
+	done := make(chan struct{})
 	
 	// Start workers
 	var wg sync.WaitGroup
@@ -93,6 +94,8 @@ func ParallelListAllKeys(client *api.Client, accountID, namespaceID string, opti
 				select {
 				case <-ctx.Done():
 					resultChan <- pageResult{err: ctx.Err()}
+					return
+				case <-done:
 					return
 				default:
 				}
@@ -128,6 +131,8 @@ func ParallelListAllKeys(client *api.Client, accountID, namespaceID string, opti
 					case workChan <- pageWork{cursor: result.Cursor, pageNum: work.pageNum + 1}:
 					case <-ctx.Done():
 						return
+					case <-done:
+						return
 					}
 				}
 			}
@@ -157,6 +162,7 @@ func ParallelListAllKeys(client *api.Client, accountID, namespaceID string, opti
 			mu.Unlock()
 			time.Sleep(10 * time.Millisecond)
 		}
+		close(done)
 		close(workChan)
 		wg.Wait()
 		close(resultChan)
