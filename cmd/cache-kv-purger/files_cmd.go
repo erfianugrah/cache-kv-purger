@@ -172,7 +172,6 @@ The Cloudflare API requires complete URLs for cache purging.`,
 			}
 
 			// Track successes
-			successCount := 0
 
 			// Purge files for each zone
 			if opts.verbose {
@@ -202,7 +201,6 @@ The Cloudflare API requires complete URLs for cache purging.`,
 				data["Status"] = "Success"
 
 				common.FormatKeyValueTable(data)
-				successCount++
 			} else {
 				// For large numbers of files, use batch processing
 				if opts.verbose {
@@ -246,7 +244,6 @@ The Cloudflare API requires complete URLs for cache purging.`,
 				data["Status"] = "Complete"
 				
 				common.FormatKeyValueTable(data)
-				successCount++
 			}
 
 			return nil

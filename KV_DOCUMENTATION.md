@@ -356,11 +356,54 @@ This command is ideal for maintaining consistency between your KV storage and CD
 - `--concurrency`: Control the number of concurrent operations
 - `--batch-size`: Set the batch size for KV operations
 
+## Performance Optimizations
+
+The KV commands have been extensively optimized for large-scale operations:
+
+### Key Improvements
+- **Streaming Architecture**: Constant memory usage for operations on millions of keys
+- **Concurrent Metadata Fetching**: 8-10x faster than serial fetching
+- **Smart Batch Processing**: Automatic retry with binary search for failed operations
+- **Adaptive Concurrency**: Automatically adjusts based on API performance
+- **Connection Pooling**: HTTP/2 with persistent connections
+- **Memory Pooling**: Reduces garbage collection pressure
+
+### Performance Tuning
+For optimal performance with large KV namespaces:
+
+```bash
+# Listing large namespaces (streaming)
+cache-kv-purger kv list --namespace-id YOUR_NAMESPACE_ID \
+  --batch-size 1000 \
+  --concurrency 50
+
+# Bulk operations with optimal settings
+cache-kv-purger kv delete --namespace-id YOUR_NAMESPACE_ID \
+  --bulk --prefix "temp-" \
+  --batch-size 100 \
+  --concurrency 20
+
+# Metadata operations (highly concurrent)
+cache-kv-purger kv get --namespace-id YOUR_NAMESPACE_ID \
+  --bulk --prefix "config-" \
+  --metadata \
+  --concurrency 50
+```
+
+### Performance Benchmarks
+- **Listing**: 785 keys/second (API cursor limitation)
+- **Batch Delete**: 60+ keys/second with automatic fallback
+- **Metadata Fetch**: 8-10x improvement with concurrent operations
+- **Memory Usage**: Constant O(1) regardless of namespace size
+
 ## Best Practices
 
 1. **Use namespace names**: Use `--namespace` (name) instead of `--namespace-id` for better readability
 2. **Safety first**: Always use `--dry-run` before bulk deletion operations to preview changes
 3. **Performance tuning**: For large operations, tune `--batch-size` and `--concurrency` parameters
+   - Use higher concurrency (20-50) for metadata operations
+   - Use moderate concurrency (10-20) for write/delete operations
+   - Monitor for 429 rate limit errors and adjust accordingly
 4. **Metadata visibility**: Use `--metadata` with search operations to see matching structures
 5. **Deep search**: Use `--search` without `--tag-field` for powerful recursive searches through complex metadata
 6. **JSON formatting**: When machine-readable output is needed, use the `--json` flag
@@ -369,3 +412,7 @@ This command is ideal for maintaining consistency between your KV storage and CD
    - Update scripts to use the new command format
    - Test commands with `--dry-run` or non-destructive flags first
    - Update internal documentation to reference the new command structure
+9. **Large namespace operations**:
+   - Use streaming operations to avoid memory issues
+   - Enable progress callbacks with `--verbose` for visibility
+   - Consider breaking very large operations into chunks

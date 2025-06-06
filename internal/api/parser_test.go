@@ -59,7 +59,7 @@ func TestParseAPIResponse(t *testing.T) {
 		}
 
 		// Check if the error contains the code and message
-		if err != nil && !contains(err.Error(), "Invalid request") {
+		if err != nil && !testContains(err.Error(), "Invalid request") {
 			t.Errorf("Error doesn't contain expected message: %v", err)
 		}
 	})
@@ -83,7 +83,7 @@ func TestParseAPIResponse(t *testing.T) {
 		}
 
 		// Just check if there's an error with "JSON" in the message
-		if !contains(err.Error(), "unexpected end of JSON input") {
+		if !testContains(err.Error(), "unexpected end of JSON input") {
 			t.Errorf("Expected JSON syntax error message, got: %v", err)
 		}
 	})
@@ -209,7 +209,7 @@ func TestFormatAPIError(t *testing.T) {
 }
 
 // Helper function to check if string contains a substring
-func contains(s, substr string) bool {
+func testContains(s, substr string) bool {
 	for i := 0; i <= len(s)-len(substr); i++ {
 		if s[i:i+len(substr)] == substr {
 			return true

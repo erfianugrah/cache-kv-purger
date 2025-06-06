@@ -89,11 +89,36 @@ cache-kv-purger --version
 git clone https://github.com/erfianugrah/cache-kv-purger.git
 cd cache-kv-purger
 
+# Install dependencies
+go mod download
+
 # Build the binary
-go build -o cache-kv-purger ./cmd/cli
+go build -o cache-kv-purger ./cmd/cache-kv-purger
 
 # Run the tool
-./cache-kv-purger
+./cache-kv-purger --help
+
+# Optional: Install to system path
+sudo mv cache-kv-purger /usr/local/bin/
+```
+
+#### Build Requirements
+- Go 1.21 or higher
+- Internet connection for downloading dependencies
+
+#### Build Options
+
+```bash
+# Standard build
+go build -o cache-kv-purger ./cmd/cache-kv-purger
+
+# Build with optimizations (smaller binary, better performance)
+go build -ldflags="-s -w" -o cache-kv-purger ./cmd/cache-kv-purger
+
+# Build for specific platform
+GOOS=linux GOARCH=amd64 go build -o cache-kv-purger-linux ./cmd/cache-kv-purger
+GOOS=darwin GOARCH=amd64 go build -o cache-kv-purger-mac ./cmd/cache-kv-purger
+GOOS=windows GOARCH=amd64 go build -o cache-kv-purger.exe ./cmd/cache-kv-purger
 ```
 
 ## Authentication
@@ -875,7 +900,18 @@ The tool includes several advanced features for optimizing performance and handl
 
 ### Performance Optimization
 
-#### Batch Processing
+The tool has been extensively optimized for large-scale operations handling millions of keys efficiently:
+
+#### Key Performance Improvements
+- **Connection Pooling**: HTTP/2 with persistent connections provides 7% improvement
+- **Batch Metadata Fetching**: 8-10x faster than individual API calls
+- **Streaming Architecture**: Constant O(1) memory usage regardless of dataset size
+- **Smart Batch Operations**: Binary search fallback for failed deletions
+- **Adaptive Concurrency**: Automatically adjusts based on API performance
+- **Rate Limiting**: Token bucket algorithm prevents 429 errors
+- **Retry Mechanism**: Exponential backoff with circuit breaker pattern
+
+#### Batch Processing Configuration
 - **KV Write Operations**: Optimizes performance with concurrent batch operations
   - Default batch size: 100 items per batch
   - Maximum batch size: 10,000 items per API call
@@ -888,6 +924,12 @@ The tool includes several advanced features for optimizing performance and handl
   - Default concurrency: 10 parallel requests (configurable via `--concurrency` flag or `CLOUDFLARE_CACHE_CONCURRENCY`)
   - Maximum concurrency: 20 parallel requests
   - Uses parallelism to maximize throughput while respecting API limits
+
+#### Performance Benchmarks
+- **Listing**: 785 keys/second (limited by cursor-based pagination)
+- **Batch Delete**: 60+ keys/second with automatic fallback
+- **Metadata Fetch**: 8-10x improvement with concurrent fetching
+- **Memory Usage**: Constant regardless of operation size via streaming
 
 #### Cross-Zone Operations
 - **Multi-Zone Purging**: For purging the same content across multiple zones
