@@ -173,3 +173,53 @@ type mockTransport struct {
 func (m *mockTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	return m.roundTrip(req)
 }
+
+func TestConnectionPooling(t *testing.T) {
+	// Test that the client is configured with proper connection pooling
+	client, err := NewClient(
+		WithCredentials(&auth.CredentialInfo{
+			Type: auth.AuthTypeAPIToken,
+			Key:  "test-token",
+		}),
+	)
+	
+	if err != nil {
+		t.Fatalf("Failed to create client: %v", err)
+	}
+	
+	// Verify transport is configured correctly
+	transport, ok := client.HTTPClient.Transport.(*http.Transport)
+	if !ok {
+		t.Fatal("Expected http.Transport")
+	}
+	
+	// Check connection pool settings
+	if transport.MaxIdleConns != 500 {
+		t.Errorf("Expected MaxIdleConns to be 500, got %d", transport.MaxIdleConns)
+	}
+	
+	if transport.MaxIdleConnsPerHost != 100 {
+		t.Errorf("Expected MaxIdleConnsPerHost to be 100, got %d", transport.MaxIdleConnsPerHost)
+	}
+	
+	if transport.MaxConnsPerHost != 100 {
+		t.Errorf("Expected MaxConnsPerHost to be 100, got %d", transport.MaxConnsPerHost)
+	}
+	
+	if !transport.ForceAttemptHTTP2 {
+		t.Error("Expected ForceAttemptHTTP2 to be true")
+	}
+	
+	if !transport.DisableCompression {
+		t.Error("Expected DisableCompression to be true")
+	}
+	
+	// Test stats method
+	idleConns, totalConns := client.GetTransportStats()
+	if idleConns != 500 {
+		t.Errorf("Expected idle connections stat to be 500, got %d", idleConns)
+	}
+	if totalConns != 100 {
+		t.Errorf("Expected total connections stat to be 100, got %d", totalConns)
+	}
+}

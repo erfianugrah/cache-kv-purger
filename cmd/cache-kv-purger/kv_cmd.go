@@ -124,4 +124,6 @@ func init() {
 	kvCmd.AddCommand(cmdutil.NewKVCreateCommand().Build())
 	kvCmd.AddCommand(cmdutil.NewKVRenameCommand().Build())
 	kvCmd.AddCommand(cmdutil.NewKVConfigCommand().Build())
+	
+	// Demo commands removed for production build
 }

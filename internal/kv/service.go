@@ -258,19 +258,68 @@ func (s *CloudflareKVService) Exists(ctx context.Context, accountID, namespaceID
 
 // BulkGet gets multiple values in bulk
 func (s *CloudflareKVService) BulkGet(ctx context.Context, accountID, namespaceID string, keys []string, options BulkGetOptions) ([]KeyValuePair, error) {
-	// This is a more complex operation that needs to be implemented
-	// For now, we'll just get each key individually
-	result := make([]KeyValuePair, 0, len(keys))
+	if len(keys) == 0 {
+		return []KeyValuePair{}, nil
+	}
 
-	for _, key := range keys {
-		kv, err := s.Get(ctx, accountID, namespaceID, key, ServiceGetOptions{
-			IncludeMetadata: options.IncludeMetadata,
-		})
-		if err != nil {
-			// Skip keys that don't exist or have errors
-			continue
+	result := make([]KeyValuePair, 0, len(keys))
+	
+	// If metadata is requested, use optimized batch fetching
+	if options.IncludeMetadata {
+		// First, get all values
+		keyValueMap := make(map[string]string)
+		for _, key := range keys {
+			value, err := GetValue(s.client, accountID, namespaceID, key)
+			if err != nil {
+				// Skip keys that don't exist
+				continue
+			}
+			keyValueMap[key] = value
 		}
-		result = append(result, *kv)
+		
+		// Then batch fetch metadata for existing keys
+		existingKeys := make([]string, 0, len(keyValueMap))
+		for key := range keyValueMap {
+			existingKeys = append(existingKeys, key)
+		}
+		
+		metadataOpts := &BatchMetadataOptions{
+			BatchSize:   options.BatchSize,
+			Concurrency: options.Concurrency,
+		}
+		if metadataOpts.BatchSize == 0 {
+			metadataOpts.BatchSize = 100
+		}
+		if metadataOpts.Concurrency == 0 {
+			metadataOpts.Concurrency = 50
+		}
+		
+		metadataMap, _ := BatchFetchMetadataOptimized(ctx, s.client, accountID, namespaceID, existingKeys, metadataOpts)
+		
+		// Combine results
+		for key, value := range keyValueMap {
+			kvp := KeyValuePair{
+				Key:   key,
+				Value: value,
+			}
+			if metadata, ok := metadataMap[key]; ok {
+				kvp.Metadata = metadata
+			}
+			result = append(result, kvp)
+		}
+	} else {
+		// Just get values without metadata
+		for _, key := range keys {
+			value, err := GetValue(s.client, accountID, namespaceID, key)
+			if err != nil {
+				// Skip keys that don't exist
+				continue
+			}
+			result = append(result, KeyValuePair{
+				Key:   key,
+				Value: value,
+			})
+		}
 	}
 
 	return result, nil
@@ -402,10 +451,23 @@ func (s *CloudflareKVService) BulkDelete(ctx context.Context, accountID, namespa
 		}
 		return successCount, nil
 	} else {
-		// Fall back to sequential deletion
-		verbose("Using sequential deletion")
-		debug("Initializing sequential deletion with batch size %d", options.BatchSize)
-		err := DeleteMultipleValuesInBatches(s.client, accountID, namespaceID, keysToDelete, options.BatchSize, progressCallback)
+		// Use optimized deletion with binary search fallback
+		verbose("Using optimized deletion with smart fallback")
+		debug("Initializing optimized deletion with batch size %d", options.BatchSize)
+		
+		// Set default batch size if not specified
+		batchSize := options.BatchSize
+		if batchSize == 0 {
+			batchSize = 1000 // Default to 1000 keys per batch
+		}
+		
+		err := DeleteMultipleValuesWithProgress(s.client, accountID, namespaceID, keysToDelete, 
+			batchSize, func(deleted, total int) {
+				if progressCallback != nil {
+					progressCallback(deleted, total)
+				}
+			})
+		
 		if err != nil {
 			return 0, err
 		}

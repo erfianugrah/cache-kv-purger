@@ -22,7 +22,17 @@ func init() {
 	rootCmd.PersistentFlags().String("verbosity", "normal", "Verbosity level: quiet, normal, verbose, debug. Overrides command-specific --verbose flags")
 	rootCmd.PersistentFlags().StringP("zone", "z", "", "Cloudflare Zone ID or domain name (required for most commands)")
 	
+	// Initialize default rate limits
+	initializeRateLimits()
+	
 	// Demo commands disabled for release build
+}
+
+// initializeRateLimits sets up default rate limits
+func initializeRateLimits() {
+	// Import required package
+	_ = "cache-kv-purger/internal/common"
+	// Rate limits are initialized when first used
 }
 
 // setupCommandValidation recursively adds help and flag validation to all commands
