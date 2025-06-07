@@ -51,7 +51,7 @@ func WithConfigAndClient(fn func(*cobra.Command, []string, *config.Config, *api.
 		// will respect the verbosity flags even if they don't use WithVerbose specifically
 		verbosityStr, _ := cmd.Root().PersistentFlags().GetString("verbosity")
 		verboseFlag, _ := cmd.Flags().GetBool("verbose")
-		
+
 		// Set verbose environment flag for commands to check
 		if verboseFlag || verbosityStr == "verbose" || verbosityStr == "debug" {
 			if cfg != nil {

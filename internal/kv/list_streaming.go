@@ -18,9 +18,9 @@ type StreamingListOptions struct {
 }
 
 // StreamKeys returns a channel that streams keys as they're fetched
-func StreamKeys(ctx context.Context, client *api.Client, accountID, namespaceID string, 
+func StreamKeys(ctx context.Context, client *api.Client, accountID, namespaceID string,
 	listOpts *ListKeysOptions, streamOpts *StreamingListOptions) (<-chan KeyValuePair, <-chan error, error) {
-	
+
 	// Validate inputs
 	if accountID == "" {
 		return nil, nil, fmt.Errorf("account ID is required")
@@ -70,12 +70,12 @@ func StreamKeys(ctx context.Context, client *api.Client, accountID, namespaceID 
 				select {
 				case keyChan <- key:
 					totalFetched++
-					
+
 					// Progress callback
 					if streamOpts.Progress && streamOpts.ProgressCallback != nil && totalFetched%1000 == 0 {
 						streamOpts.ProgressCallback(totalFetched)
 					}
-					
+
 				case <-ctx.Done():
 					select {
 					case errChan <- ctx.Err():
@@ -105,7 +105,7 @@ func StreamKeys(ctx context.Context, client *api.Client, accountID, namespaceID 
 // ProcessKeysStreaming processes keys as they arrive without loading all into memory
 func ProcessKeysStreaming(ctx context.Context, client *api.Client, accountID, namespaceID string,
 	listOpts *ListKeysOptions, processor func(key KeyValuePair) error) error {
-	
+
 	streamOpts := &StreamingListOptions{
 		BufferSize: 1000,
 		Progress:   true,

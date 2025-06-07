@@ -86,9 +86,9 @@ func createPurgeTagsCmd() *cobra.Command {
 				if err != nil {
 					return fmt.Errorf("failed to read tags file: %w", err)
 				}
-				
+
 				allTags = append(allTags, tagsFromFile...)
-				
+
 				if verbose {
 					fmt.Printf("Added %d tags from file\n", len(tagsFromFile))
 				}

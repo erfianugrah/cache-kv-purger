@@ -15,7 +15,7 @@ func (s *CloudflareKVService) bulkDeleteWithAdvancedFilteringFixed(ctx context.C
 			fmt.Printf("[VERBOSE] "+format+"\n", args...)
 		}
 	}
-	
+
 	debug := func(format string, args ...interface{}) {
 		// Only print debug information in debug mode
 		if options.Debug {
@@ -70,7 +70,7 @@ func (s *CloudflareKVService) BulkDeleteFixed(ctx context.Context, accountID, na
 			fmt.Printf("[VERBOSE] "+format+"\n", args...)
 		}
 	}
-	
+
 	debug := func(format string, args ...interface{}) {
 		// Only print debug information in debug mode
 		if options.Debug {
@@ -125,7 +125,7 @@ func (s *CloudflareKVService) BulkDeleteFixed(ctx context.Context, accountID, na
 	if options.TagField != "" || options.SearchValue != "" {
 		verbose("Using advanced filtering with tag field '%s' or search value '%s'",
 			options.TagField, options.SearchValue)
-		debug("Starting advanced filtering process with field='%s', value='%s'", 
+		debug("Starting advanced filtering process with field='%s', value='%s'",
 			options.TagField, options.SearchValue)
 
 		// If dry run, simulate count for advanced filtering

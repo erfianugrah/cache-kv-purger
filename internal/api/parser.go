@@ -110,7 +110,7 @@ func FormatAPIError(resp *APIResponse) error {
 			}
 			return fmt.Errorf("multiple API errors: %v", errMsgs)
 		}
-		
+
 		// Single error case
 		err := resp.Errors[0]
 		return fmt.Errorf("API error [%d]: %s", err.Code, err.Message)

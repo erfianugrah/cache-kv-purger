@@ -191,7 +191,7 @@ func FilterKeysOptimized(keys []string, predicate func(string) bool) []string {
 
 	// Use pooled slice for results
 	resultSlice := common.MemoryPools.GetLargeSlice()
-	
+
 	for _, key := range keys {
 		if predicate(key) {
 			*resultSlice = append(*resultSlice, key)
@@ -201,7 +201,7 @@ func FilterKeysOptimized(keys []string, predicate func(string) bool) []string {
 	// Copy to right-sized slice
 	filtered := make([]string, len(*resultSlice))
 	copy(filtered, *resultSlice)
-	
+
 	// Return pooled slice
 	common.MemoryPools.PutLargeSlice(resultSlice)
 

@@ -16,8 +16,8 @@ func TestNewClient(t *testing.T) {
 		WithBaseURL("https://api.cloudflare.com/client/v4"),
 		WithTimeout(60*time.Second),
 		WithCredentials(&auth.CredentialInfo{
-			Type:  auth.AuthTypeAPIToken,
-			Key:   "test-token",
+			Type: auth.AuthTypeAPIToken,
+			Key:  "test-token",
 		}),
 	)
 
@@ -32,7 +32,7 @@ func TestNewClient(t *testing.T) {
 	// Test with default options, with mocked credentials to avoid ENV dependency
 	os.Setenv(auth.EnvAPIToken, "test-env-token")
 	defer os.Unsetenv(auth.EnvAPIToken)
-	
+
 	client, err = NewClient()
 	if err != nil {
 		t.Errorf("Failed to create client with default options: %v", err)
@@ -74,19 +74,19 @@ func TestRequest(t *testing.T) {
 	path := "/zones"
 	query := url.Values{}
 	body := struct{}{}
-	
+
 	// Execute the request
 	respBody, err := client.Request(method, path, query, body)
-	
+
 	// Verify the response
 	if err != nil {
 		t.Errorf("Failed to execute request: %v", err)
 	}
-	
+
 	if len(respBody) == 0 {
 		t.Errorf("Expected non-empty response body")
 	}
-	
+
 	// Check that response contains expected JSON
 	respString := string(respBody)
 	expectedJSON := `{"success": true, "result": {"id": "123"}}`
@@ -132,11 +132,11 @@ func TestURLBuilding(t *testing.T) {
 					Key:  "test-token",
 				}),
 			)
-			
+
 			if err != nil {
 				t.Fatalf("Failed to create client: %v", err)
 			}
-			
+
 			// Since buildRequestURL is not exported, we'll test through Request
 			// Create a mock http client to intercept the URL
 			var capturedURL string
@@ -151,12 +151,12 @@ func TestURLBuilding(t *testing.T) {
 					},
 				},
 			}
-			
+
 			// Make a request to capture the URL
 			if _, err := client.Request("GET", tc.path, nil, nil); err != nil {
 				t.Fatalf("Request failed: %v", err)
 			}
-			
+
 			// Check the URL
 			if capturedURL != tc.expected {
 				t.Errorf("Expected URL %q, got %q", tc.expected, capturedURL)
@@ -182,38 +182,38 @@ func TestConnectionPooling(t *testing.T) {
 			Key:  "test-token",
 		}),
 	)
-	
+
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)
 	}
-	
+
 	// Verify transport is configured correctly
 	transport, ok := client.HTTPClient.Transport.(*http.Transport)
 	if !ok {
 		t.Fatal("Expected http.Transport")
 	}
-	
+
 	// Check connection pool settings
 	if transport.MaxIdleConns != 500 {
 		t.Errorf("Expected MaxIdleConns to be 500, got %d", transport.MaxIdleConns)
 	}
-	
+
 	if transport.MaxIdleConnsPerHost != 100 {
 		t.Errorf("Expected MaxIdleConnsPerHost to be 100, got %d", transport.MaxIdleConnsPerHost)
 	}
-	
+
 	if transport.MaxConnsPerHost != 100 {
 		t.Errorf("Expected MaxConnsPerHost to be 100, got %d", transport.MaxConnsPerHost)
 	}
-	
+
 	if !transport.ForceAttemptHTTP2 {
 		t.Error("Expected ForceAttemptHTTP2 to be true")
 	}
-	
+
 	if !transport.DisableCompression {
 		t.Error("Expected DisableCompression to be true")
 	}
-	
+
 	// Test stats method
 	idleConns, totalConns := client.GetTransportStats()
 	if idleConns != 500 {

@@ -34,7 +34,7 @@ type Config struct {
 	AccountID            string `json:"account_id,omitempty"`
 	CacheConcurrency     int    `json:"cache_concurrency,omitempty"`
 	MultiZoneConcurrency int    `json:"multi_zone_concurrency,omitempty"`
-	
+
 	// Runtime configuration values (not persisted)
 	runtimeValues map[string]string
 }

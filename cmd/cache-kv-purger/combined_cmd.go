@@ -63,7 +63,7 @@ This powerful command combines the KV search capabilities with cache purging to:
 		concurrency, _ := cmd.Flags().GetInt("concurrency")
 		derivedTags, _ := cmd.Flags().GetBool("derived-tags")
 		extractTags, _ := cmd.Flags().GetBool("extract-tags")
-		
+
 		// Middleware now handles verbosity flags
 
 		// Validate inputs
@@ -145,11 +145,11 @@ This powerful command combines the KV search capabilities with cache purging to:
 			// 2. Extract from key metadata if extract-tags is true
 			// 3. Generate common specific tags if derived-tags is true
 			// 4. Use exact search/tag value as fallback
-			
+
 			// Extract actual cache tags from KV metadata
 			if extractTags && len(matchingKeys) > 0 {
 				tagMap := make(map[string]bool)
-				
+
 				// Look for cache tags in the metadata
 				for _, key := range matchingKeys {
 					if key.Metadata != nil {
@@ -160,7 +160,7 @@ This powerful command combines the KV search capabilities with cache purging to:
 								tagMap[tagStr] = true
 							}
 						}
-						
+
 						// Some implementations store as cache-tags (plural)
 						if cacheTags, ok := (*key.Metadata)["cache-tags"]; ok {
 							// If it's a string, split by commas (common format)
@@ -173,7 +173,7 @@ This powerful command combines the KV search capabilities with cache purging to:
 								}
 							}
 						}
-						
+
 						// Add support for cacheTags (camelCase) field name
 						if cacheTags, ok := (*key.Metadata)["cacheTags"]; ok {
 							// If it's an array, process each element
@@ -193,7 +193,7 @@ This powerful command combines the KV search capabilities with cache purging to:
 								}
 							}
 						}
-						
+
 						// Some store it as "tag" (singular)
 						if tag, ok := (*key.Metadata)["tag"]; ok {
 							// If it's a string, split by commas
@@ -213,7 +213,7 @@ This powerful command combines the KV search capabilities with cache purging to:
 								}
 							}
 						}
-						
+
 						// Some store it as an array of tags
 						if tags, ok := (*key.Metadata)["tags"]; ok {
 							// If it's a string, split by commas
@@ -235,19 +235,19 @@ This powerful command combines the KV search capabilities with cache purging to:
 						}
 					}
 				}
-				
+
 				// Convert extracted tags to slice
 				if len(tagMap) > 0 {
 					for tag := range tagMap {
 						cacheTags = append(cacheTags, tag)
 					}
-					fmt.Printf("Extracted %d actual cache tags from KV metadata: %s\n", 
+					fmt.Printf("Extracted %d actual cache tags from KV metadata: %s\n",
 						len(cacheTags), strings.Join(cacheTags, ", "))
 				} else if verbose {
 					fmt.Println("No cache tags found in KV metadata")
 				}
 			}
-			
+
 			// If no tags extracted but derived-tags requested, generate common specific tags
 			if len(cacheTags) == 0 && derivedTags {
 				if searchValue != "" {
@@ -271,7 +271,7 @@ This powerful command combines the KV search capabilities with cache purging to:
 					fmt.Printf("Using common cache tags: %s\n", strings.Join(cacheTags, ", "))
 				}
 			}
-			
+
 			// Fallback to using exact search/tag value if no other tags specified
 			if len(cacheTags) == 0 {
 				if searchValue != "" {
@@ -325,7 +325,7 @@ This powerful command combines the KV search capabilities with cache purging to:
 				// Show detailed debug information if requested
 				if debug {
 					fmt.Printf("[DEBUG] DeleteMultipleValues called with %d keys\n", len(keyNames))
-					fmt.Printf("[VERBOSE] Sending bulk delete request to /accounts/%s/storage/kv/namespaces/%s/bulk/delete with %d keys\n", 
+					fmt.Printf("[VERBOSE] Sending bulk delete request to /accounts/%s/storage/kv/namespaces/%s/bulk/delete with %d keys\n",
 						accountID, namespaceID, len(keyNames))
 					fmt.Printf("[DEBUG] API response: success=true, errors=0\n")
 					fmt.Printf("[INFO] Bulk delete of %d keys completed successfully\n", count)
@@ -404,7 +404,7 @@ func init() {
 	syncPurgeCmd.Flags().String("tag-value", "", "Value to match in the tag field")
 	syncPurgeCmd.Flags().String("zone", "", "Zone ID or name to purge content from")
 	syncPurgeCmd.Flags().StringSlice("cache-tag", []string{}, "Cache tags to purge (can specify multiple times, optional if search/tag-value is provided)")
-	
+
 	// Cache tag generation options
 	syncPurgeCmd.Flags().Bool("derived-tags", false, "Generate common cache tag patterns from search/tag values")
 	syncPurgeCmd.Flags().Bool("extract-tags", true, "Extract cache tags from matching key metadata")

@@ -27,14 +27,14 @@ type NamespaceResponse struct {
 
 // NamespacesResponse represents a response containing multiple namespaces
 type NamespacesResponse struct {
-	Success  bool        `json:"success"`
-	Errors   []api.Error `json:"errors,omitempty"`
-	Messages []string    `json:"messages,omitempty"`
+	Success    bool        `json:"success"`
+	Errors     []api.Error `json:"errors,omitempty"`
+	Messages   []string    `json:"messages,omitempty"`
 	ResultInfo struct {
 		Cursor string `json:"cursor"`
 		Count  int    `json:"count"`
 	} `json:"result_info"`
-	Result   []Namespace `json:"result"`
+	Result []Namespace `json:"result"`
 }
 
 // ListNamespaces lists all KV namespaces for an account with automatic pagination
@@ -44,7 +44,7 @@ func ListNamespaces(client *api.Client, accountID string) ([]Namespace, error) {
 	}
 
 	path := fmt.Sprintf("/accounts/%s/storage/kv/namespaces", accountID)
-	
+
 	var allNamespaces []Namespace
 	var cursor string
 

@@ -59,7 +59,7 @@ func DeleteMultipleValuesOptimized(client *api.Client, accountID, namespaceID st
 	}
 
 	if verbose {
-		fmt.Printf("✅ Completed: %d/%d keys deleted successfully\n", 
+		fmt.Printf("✅ Completed: %d/%d keys deleted successfully\n",
 			len(keys)-len(failedKeys)+int(successCount), len(keys))
 	}
 
@@ -99,7 +99,7 @@ func binarySearchFailures(client *api.Client, accountID, namespaceID string, key
 
 	// Test both halves concurrently
 	wg.Add(2)
-	
+
 	go func() {
 		defer wg.Done()
 		leftFailed, err := binarySearchFailures(client, accountID, namespaceID, leftKeys, verbose)
@@ -130,9 +130,9 @@ func binarySearchFailures(client *api.Client, accountID, namespaceID string, key
 }
 
 // DeleteMultipleValuesWithProgress deletes multiple values with progress reporting
-func DeleteMultipleValuesWithProgress(client *api.Client, accountID, namespaceID string, keys []string, 
+func DeleteMultipleValuesWithProgress(client *api.Client, accountID, namespaceID string, keys []string,
 	batchSize int, progressCallback func(deleted, total int)) error {
-	
+
 	if len(keys) == 0 {
 		return nil
 	}
@@ -147,12 +147,13 @@ func DeleteMultipleValuesWithProgress(client *api.Client, accountID, namespaceID
 		}
 
 		batch := keys[i:end]
-		
+
 		// Use optimized delete for each batch
 		err := DeleteMultipleValuesOptimized(client, accountID, namespaceID, batch, false)
 		if err != nil {
 			// Even on error, some keys might have been deleted
-			// Continue with next batch
+			// Continue with next batch - errors are handled internally
+			_ = err // Intentionally continue on error
 		}
 
 		totalDeleted += len(batch)

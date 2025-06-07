@@ -8,6 +8,13 @@ import (
 	"github.com/spf13/pflag"
 )
 
+// Version information (set by ldflags during build)
+var (
+	version = "dev"
+	commit  = "unknown"
+	date    = "unknown"
+)
+
 // rootCmd is the base command for the CLI application
 var rootCmd = &cobra.Command{
 	Use:   "cache-kv-purger",
@@ -17,14 +24,29 @@ This tool uses Cloudflare's API to perform various operations related to cache m
 and KV store manipulation.`,
 }
 
+// versionCmd represents the version command
+var versionCmd = &cobra.Command{
+	Use:   "version",
+	Short: "Print version information",
+	Run: func(cmd *cobra.Command, args []string) {
+		fmt.Printf("cache-kv-purger version %s\n", version)
+		fmt.Printf("  commit: %s\n", commit)
+		fmt.Printf("  built:  %s\n", date)
+	},
+}
+
 func init() {
+	// Add version command
+	rootCmd.AddCommand(versionCmd)
+
 	// Add global flags
 	rootCmd.PersistentFlags().String("verbosity", "normal", "Verbosity level: quiet, normal, verbose, debug. Overrides command-specific --verbose flags")
 	rootCmd.PersistentFlags().StringP("zone", "z", "", "Cloudflare Zone ID or domain name (required for most commands)")
-	
+	rootCmd.PersistentFlags().Bool("version", false, "Print version information")
+
 	// Initialize default rate limits
 	initializeRateLimits()
-	
+
 	// Demo commands disabled for release build
 }
 
@@ -53,7 +75,17 @@ func setupCommandValidation(cmd *cobra.Command) {
 		// Check if --help is present anywhere in the arguments
 		for _, arg := range os.Args {
 			if arg == "--help" || arg == "-h" {
-				cmd.Help()
+				_ = cmd.Help()
+				os.Exit(0)
+			}
+		}
+
+		// Check for version flag (only for root command)
+		if cmd == rootCmd {
+			if v, _ := cmd.Flags().GetBool("version"); v {
+				fmt.Printf("cache-kv-purger version %s\n", version)
+				fmt.Printf("  commit: %s\n", commit)
+				fmt.Printf("  built:  %s\n", date)
 				os.Exit(0)
 			}
 		}
@@ -99,4 +131,3 @@ func main() {
 		os.Exit(0)
 	}
 }
-

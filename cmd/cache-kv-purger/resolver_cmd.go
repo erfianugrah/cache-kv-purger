@@ -3,105 +3,50 @@ package main
 import (
 	"cache-kv-purger/internal/api"
 	"cache-kv-purger/internal/cache"
-	"cache-kv-purger/internal/common"
 	"cache-kv-purger/internal/config"
 	"cache-kv-purger/internal/zones"
 	"fmt"
 	"github.com/spf13/cobra"
-	"net/url"
 	"strings"
 )
 
-// handleAutoZoneDetectionForFiles handles auto-detection of zones from file URLs
-func handleAutoZoneDetectionForFiles(client *api.Client, accountID string, files []string, cmd *cobra.Command,
-	cacheConcurrency, multiZoneConcurrency int) error {
-	verbose, _ := cmd.Flags().GetBool("verbose")
-	
-	// Group files by hostname
-	filesByHost := make(map[string][]string)
-	var invalidFiles []string
-	
-	for _, file := range files {
-		u, err := url.Parse(file)
-		if err != nil {
-			fmt.Printf("Warning: Skipping invalid URL: %s\n", file)
-			invalidFiles = append(invalidFiles, file)
-			continue
-		}
-
-		host := u.Hostname()
-		if host == "" {
-			fmt.Printf("Warning: Skipping URL without hostname: %s\n", file)
-			invalidFiles = append(invalidFiles, file)
-			continue
-		}
-
-		filesByHost[host] = append(filesByHost[host], file)
-	}
-
-	// Extract unique hostnames
-	hosts := make([]string, 0, len(filesByHost))
-	for host := range filesByHost {
-		hosts = append(hosts, host)
-	}
-	
-	if verbose {
-		fmt.Printf("Auto-detecting zones for %d hosts...\n", len(hosts))
-	}
-	
-	// Detect zones for hosts
-	hostZones, unknownHosts, err := zones.DetectZonesFromHosts(client, accountID, hosts)
-	if err != nil {
-		return fmt.Errorf("failed to detect zones: %w", err)
-	}
-	
-	if len(unknownHosts) > 0 {
-		return fmt.Errorf("%d hosts couldn't be mapped to zones: %v", len(unknownHosts), unknownHosts)
-	}
-	
-	// Group files by zone
-	itemsByZone := zones.GroupItemsByZone(hostZones, filesByHost)
-	
-	// Now handle processing with the results
-	return handleItemsForZones(client, itemsByZone, cmd, cacheConcurrency, multiZoneConcurrency, "files")
-}
 
 // handleAutoZoneDetectionForHosts handles auto-detection of zones from hostnames
 func handleAutoZoneDetectionForHosts(client *api.Client, accountID string, hosts []string, cmd *cobra.Command,
 	cacheConcurrency, multiZoneConcurrency int) error {
 	verbose, _ := cmd.Flags().GetBool("verbose")
-	
+
 	if verbose {
 		fmt.Printf("Auto-detecting zones for %d hosts...\n", len(hosts))
 	}
-	
+
 	// Create a map where hosts map to themselves (we don't have files here)
 	hostMap := make(map[string][]string)
 	for _, host := range hosts {
 		hostMap[host] = []string{host}
 	}
-	
+
 	// Detect zones for hosts
 	hostZones, unknownHosts, err := zones.DetectZonesFromHosts(client, accountID, hosts)
 	if err != nil {
 		return fmt.Errorf("failed to detect zones: %w", err)
 	}
-	
+
 	if len(unknownHosts) > 0 {
 		return fmt.Errorf("%d hosts couldn't be mapped to zones: %v", len(unknownHosts), unknownHosts)
 	}
-	
+
 	// Group hosts by zone
 	itemsByZone := zones.GroupItemsByZone(hostZones, hostMap)
-	
+
 	// Now handle processing with the results
 	return handleItemsForZones(client, itemsByZone, cmd, cacheConcurrency, multiZoneConcurrency, "hosts")
 }
 
 // handleItemsForZones handles processing items (files or hosts) by zone
-func handleItemsForZones(client *api.Client, itemsByZone map[string][]string, cmd *cobra.Command, 
+func handleItemsForZones(client *api.Client, itemsByZone map[string][]string, cmd *cobra.Command,
 	cacheConcurrency, multiZoneConcurrency int, itemType string) error {
-	
+
 	verbose, _ := cmd.Flags().GetBool("verbose")
 	dryRun, _ := cmd.Flags().GetBool("dry-run")
 	batchSize, _ := cmd.Flags().GetInt("batch-size")
@@ -117,65 +62,15 @@ func handleItemsForZones(client *api.Client, itemsByZone map[string][]string, cm
 		cacheConcurrency = 20 // Max
 	}
 
+	// Validate multi-zone concurrency
 	if multiZoneConcurrency <= 0 {
 		multiZoneConcurrency = 3 // Default
 	} else if multiZoneConcurrency > 5 {
 		multiZoneConcurrency = 5 // Max to avoid overwhelming API
 	}
 
-	// Process each zone
-	successCount := 0
-	totalItems := 0
-
-	// For dry-run, just show what would be purged
-	if dryRun {
-		fmt.Printf("DRY RUN: Would purge items across %d zones\n", len(itemsByZone))
-		for zoneID, items := range itemsByZone {
-			// Get zone info for display
-			zoneInfo, err := zones.GetZoneDetails(client, zoneID)
-			zoneName := zoneID
-			if err == nil && zoneInfo.Result.Name != "" {
-				zoneName = zoneInfo.Result.Name
-			}
-
-			// Calculate batches for display
-			batches := common.SplitIntoBatches(items, batchSize)
-
-			fmt.Printf("Zone: %s - would purge %d %s in %d batches using %d concurrent workers\n",
-				zoneName, len(items), itemType, len(batches), cacheConcurrency)
-
-			if verbose {
-				for i, batch := range batches {
-					fmt.Printf("  Batch %d: %d items\n", i+1, len(batch))
-					for j, item := range batch {
-						if j < 5 { // List first 5 items to avoid overwhelming output
-							fmt.Printf("    %d. %s\n", j+1, item)
-						} else if j == 5 {
-							fmt.Printf("    ... and %d more items\n", len(batch)-5)
-							break
-						}
-					}
-				}
-			}
-
-			totalItems += len(items)
-		}
-
-		fmt.Printf("DRY RUN SUMMARY: Would purge %d total items across %d zones\n", totalItems, len(itemsByZone))
-		return nil
-	}
-
-	// Process all zones with actual purging
-	for zoneID, items := range itemsByZone {
-		totalItems += len(items)
-
-		// Get zone info for display
-		zoneInfo, err := zones.GetZoneDetails(client, zoneID)
-		zoneName := zoneID
-		if err == nil && zoneInfo.Result.Name != "" {
-			zoneName = zoneInfo.Result.Name
-		}
-
+	// Define the handler function for processing items in each zone
+	handler := func(zoneID string, zoneName string, items []string) (bool, error) {
 		// Process items based on type (files or hosts)
 		switch itemType {
 		case "files":
@@ -186,13 +81,12 @@ func handleItemsForZones(client *api.Client, itemsByZone map[string][]string, cm
 			// Make the API call to purge files
 			resp, err := cache.PurgeFiles(client, zoneID, items)
 			if err != nil {
-				fmt.Printf("Error purging files for zone %s: %s\n", zoneName, err)
-				continue
+				return false, fmt.Errorf("failed to purge files: %w", err)
 			}
 
 			fmt.Printf("Successfully purged %d files from zone %s. Purge ID: %s\n", len(items), zoneName, resp.Result.ID)
-			successCount++
-			
+			return true, nil
+
 		case "hosts":
 			if verbose {
 				fmt.Printf("Purging %d hosts for zone %s...\n", len(items), zoneName)
@@ -221,35 +115,52 @@ func handleItemsForZones(client *api.Client, itemsByZone map[string][]string, cm
 
 				// Report errors if any
 				if len(errors) > 0 {
-					fmt.Printf("Encountered %d errors during purging for zone %s:\n", len(errors), zoneName)
+					errMsg := fmt.Sprintf("Encountered %d errors during purging for zone %s:\n", len(errors), zoneName)
 					for i, err := range errors {
-						if i < 3 { // Show at most 3 errors to avoid flooding the console
-							fmt.Printf("  - %s\n", err)
+						if i < 3 { // Show at most 3 errors
+							errMsg += fmt.Sprintf("  - %s\n", err)
 						} else {
-							fmt.Printf("  - ... and %d more errors\n", len(errors)-3)
+							errMsg += fmt.Sprintf("  - ... and %d more errors\n", len(errors)-3)
 							break
 						}
 					}
-					continue
+					return false, fmt.Errorf(errMsg)
 				}
 
 				fmt.Printf("Successfully purged %d hosts from zone %s\n", len(successful), zoneName)
-				successCount++
+				return true, nil
 			} else {
 				// Small number of hosts, just use single API call
 				resp, err := cache.PurgeHosts(client, zoneID, items)
 				if err != nil {
-					fmt.Printf("Error purging hosts for zone %s: %s\n", zoneName, err)
-					continue
+					return false, fmt.Errorf("failed to purge hosts: %w", err)
 				}
 				fmt.Printf("Successfully purged %d hosts from zone %s. Purge ID: %s\n", len(items), zoneName, resp.Result.ID)
-				successCount++
+				return true, nil
 			}
+		default:
+			return false, fmt.Errorf("unknown item type: %s", itemType)
 		}
 	}
 
-	// Final summary
-	fmt.Printf("Successfully purged %d %s across %d/%d zones\n", totalItems, itemType, successCount, len(itemsByZone))
+	// Use ProcessMultiZoneItems for concurrent processing
+	totalItems, successCount, err := zones.ProcessMultiZoneItems(
+		client, 
+		itemsByZone, 
+		handler, 
+		verbose, 
+		dryRun, 
+		multiZoneConcurrency,
+	)
+	
+	if err != nil {
+		return fmt.Errorf("failed to process zones: %w", err)
+	}
+
+	// The summary is already printed by ProcessMultiZoneItems
+	_ = totalItems
+	_ = successCount
+
 	return nil
 }
 
@@ -295,7 +206,7 @@ func resolveZoneIdentifiers(cmd *cobra.Command, client *api.Client, accountID st
 	if zoneList != "" {
 		// Split by comma
 		zoneItems := strings.Split(zoneList, ",")
-		
+
 		// Filter out empty items
 		var filteredItems []string
 		for _, zone := range zoneItems {
@@ -305,7 +216,7 @@ func resolveZoneIdentifiers(cmd *cobra.Command, client *api.Client, accountID st
 				filteredItems = append(filteredItems, zone)
 			}
 		}
-		
+
 		if len(filteredItems) > 0 {
 			return zones.ResolveZoneIdentifiers(client, accountID, filteredItems)
 		}

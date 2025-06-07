@@ -67,20 +67,20 @@ func (p *APIRetryPolicy) ShouldRetry(err error, attempt int) bool {
 	}
 
 	// Retry on server errors
-	if contains(errStr, "500") || contains(errStr, "502") || 
-	   contains(errStr, "503") || contains(errStr, "504") {
+	if contains(errStr, "500") || contains(errStr, "502") ||
+		contains(errStr, "503") || contains(errStr, "504") {
 		return true
 	}
 
 	// Retry on network errors
 	if contains(errStr, "timeout") || contains(errStr, "connection refused") ||
-	   contains(errStr, "EOF") || contains(errStr, "broken pipe") {
+		contains(errStr, "EOF") || contains(errStr, "broken pipe") {
 		return true
 	}
 
 	// Don't retry on client errors (4xx except 429)
-	if contains(errStr, "400") || contains(errStr, "401") || 
-	   contains(errStr, "403") || contains(errStr, "404") {
+	if contains(errStr, "400") || contains(errStr, "401") ||
+		contains(errStr, "403") || contains(errStr, "404") {
 		return false
 	}
 
@@ -127,7 +127,7 @@ func (c *Client) RequestBatchWithRetry(ctx context.Context, requests []BatchRequ
 
 			// Make request with retry
 			resp, err := c.RequestWithRetry(ctx, request.Method, request.Path, request.Query, request.Body)
-			
+
 			responses[index] = BatchResponse{
 				Index:    index,
 				Response: resp,
@@ -186,10 +186,10 @@ func RetryableKVOperation(ctx context.Context, operation string, fn func() error
 
 // Helper function (duplicate from main client, but needed here)
 func contains(s, substr string) bool {
-	return len(s) >= len(substr) && 
-		(s == substr || 
-		 len(s) > len(substr) && 
-		 (stringContains(toLowerCase(s), toLowerCase(substr))))
+	return len(s) >= len(substr) &&
+		(s == substr ||
+			len(s) > len(substr) &&
+				(stringContains(toLowerCase(s), toLowerCase(substr))))
 }
 
 func toLowerCase(s string) string {

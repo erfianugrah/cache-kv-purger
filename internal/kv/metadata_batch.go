@@ -11,10 +11,10 @@ import (
 
 // BatchMetadataOptions configures batch metadata fetching
 type BatchMetadataOptions struct {
-	BatchSize       int
-	Concurrency     int
-	Timeout         time.Duration
-	RetryFailures   bool
+	BatchSize        int
+	Concurrency      int
+	Timeout          time.Duration
+	RetryFailures    bool
 	ProgressCallback func(fetched, total int)
 }
 
@@ -36,9 +36,9 @@ type MetadataResult struct {
 }
 
 // BatchFetchMetadataOptimized fetches metadata for multiple keys with optimizations
-func BatchFetchMetadataOptimized(ctx context.Context, client *api.Client, accountID, namespaceID string, 
+func BatchFetchMetadataOptimized(ctx context.Context, client *api.Client, accountID, namespaceID string,
 	keys []string, options *BatchMetadataOptions) (map[string]*KeyValueMetadata, error) {
-	
+
 	if len(keys) == 0 {
 		return make(map[string]*KeyValueMetadata), nil
 	}
@@ -75,7 +75,7 @@ func BatchFetchMetadataOptimized(ctx context.Context, client *api.Client, accoun
 		wg.Add(1)
 		go func(workerID int) {
 			defer wg.Done()
-			
+
 			for key := range workChan {
 				select {
 				case <-ctx.Done():
@@ -83,13 +83,13 @@ func BatchFetchMetadataOptimized(ctx context.Context, client *api.Client, accoun
 				default:
 					// Fetch metadata for this key
 					metadata, err := fetchSingleMetadata(client, accountID, namespaceID, key)
-					
+
 					result := MetadataResult{
 						Key:      key,
 						Metadata: metadata,
 						Error:    err,
 					}
-					
+
 					select {
 					case resultChan <- result:
 					case <-ctx.Done():
@@ -136,7 +136,7 @@ func BatchFetchMetadataOptimized(ctx context.Context, client *api.Client, accoun
 	// Retry failed keys with exponential backoff
 	if options.RetryFailures && len(failedKeys) > 0 {
 		retryResults := retryFailedMetadata(ctx, client, accountID, namespaceID, failedKeys, options)
-		
+
 		// Merge retry results
 		mu.Lock()
 		for key, metadata := range retryResults {
@@ -161,14 +161,14 @@ func fetchSingleMetadata(client *api.Client, accountID, namespaceID, key string)
 // retryFailedMetadata retries failed metadata fetches with exponential backoff
 func retryFailedMetadata(ctx context.Context, client *api.Client, accountID, namespaceID string,
 	failedKeys []string, options *BatchMetadataOptions) map[string]*KeyValueMetadata {
-	
+
 	results := make(map[string]*KeyValueMetadata)
 	maxRetries := 3
-	
+
 	for _, key := range failedKeys {
 		var metadata *KeyValueMetadata
 		var err error
-		
+
 		// Exponential backoff retry
 		for attempt := 0; attempt < maxRetries; attempt++ {
 			select {
@@ -180,7 +180,7 @@ func retryFailedMetadata(ctx context.Context, client *api.Client, accountID, nam
 					results[key] = metadata
 					break
 				}
-				
+
 				// Exponential backoff: 100ms, 200ms, 400ms
 				if attempt < maxRetries-1 {
 					backoff := time.Duration(100<<uint(attempt)) * time.Millisecond
@@ -189,14 +189,14 @@ func retryFailedMetadata(ctx context.Context, client *api.Client, accountID, nam
 			}
 		}
 	}
-	
+
 	return results
 }
 
 // StreamBatchMetadata fetches metadata in a streaming fashion
 func StreamBatchMetadata(ctx context.Context, client *api.Client, accountID, namespaceID string,
 	keys []string, options *BatchMetadataOptions) (<-chan MetadataResult, error) {
-	
+
 	if options == nil {
 		options = DefaultBatchMetadataOptions()
 	}
@@ -206,14 +206,14 @@ func StreamBatchMetadata(ctx context.Context, client *api.Client, accountID, nam
 
 	// Create work channel
 	workChan := make(chan string, len(keys))
-	
+
 	// Start workers
 	var wg sync.WaitGroup
 	for i := 0; i < options.Concurrency; i++ {
 		wg.Add(1)
 		go func(workerID int) {
 			defer wg.Done()
-			
+
 			for key := range workChan {
 				select {
 				case <-ctx.Done():
@@ -221,13 +221,13 @@ func StreamBatchMetadata(ctx context.Context, client *api.Client, accountID, nam
 				default:
 					// Fetch metadata
 					metadata, err := fetchSingleMetadata(client, accountID, namespaceID, key)
-					
+
 					result := MetadataResult{
 						Key:      key,
 						Metadata: metadata,
 						Error:    err,
 					}
-					
+
 					select {
 					case resultChan <- result:
 					case <-ctx.Done():
@@ -262,11 +262,11 @@ func StreamBatchMetadata(ctx context.Context, client *api.Client, accountID, nam
 // OptimizeMetadataFetching checks if metadata is already available before fetching
 func OptimizeMetadataFetching(ctx context.Context, client *api.Client, accountID, namespaceID string,
 	keys []KeyValuePair, options *BatchMetadataOptions) (map[string]*KeyValueMetadata, error) {
-	
+
 	// Separate keys that need metadata fetch
 	var keysNeedingFetch []string
 	existingMetadata := make(map[string]*KeyValueMetadata)
-	
+
 	for _, kvp := range keys {
 		if kvp.Metadata != nil {
 			// Already have metadata
@@ -276,19 +276,19 @@ func OptimizeMetadataFetching(ctx context.Context, client *api.Client, accountID
 			keysNeedingFetch = append(keysNeedingFetch, kvp.Key)
 		}
 	}
-	
+
 	// Fetch missing metadata
 	if len(keysNeedingFetch) > 0 {
 		fetchedMetadata, err := BatchFetchMetadataOptimized(ctx, client, accountID, namespaceID, keysNeedingFetch, options)
 		if err != nil {
 			return existingMetadata, err
 		}
-		
+
 		// Merge results
 		for key, metadata := range fetchedMetadata {
 			existingMetadata[key] = metadata
 		}
 	}
-	
+
 	return existingMetadata, nil
 }

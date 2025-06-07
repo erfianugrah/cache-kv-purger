@@ -52,17 +52,17 @@ The Cloudflare API requires complete URLs for cache purging.`,
 			}
 
 			// Extract flags once at the beginning
-			opts.files = files // Use local variable
+			opts.files = files         // Use local variable
 			opts.filesList = filesList // Use local variable
 			opts.zoneID = purgeFlagsVars.zoneID
 			opts.zones = purgeFlagsVars.zones
 			opts.dryRun, _ = cmd.Flags().GetBool("dry-run")
-			
+
 			// Handle verbosity settings - check both --verbose flag and --verbosity global flag
 			verboseFlag, _ := cmd.Flags().GetBool("verbose")
 			verbosityStr, _ := cmd.Root().PersistentFlags().GetString("verbosity")
 			opts.verbose = verboseFlag || verbosityStr == "verbose" || verbosityStr == "debug"
-			
+
 			opts.batchSize = batchSize
 			opts.concurrency = concurrency
 
@@ -183,7 +183,7 @@ The Cloudflare API requires complete URLs for cache purging.`,
 
 			// Check if we need to use batch processing
 			useBatchProcessing := len(validFiles) > 100 || opts.batchSize > 0 || opts.concurrency > 0
-			
+
 			if !useBatchProcessing {
 				// For small numbers of files, use the direct API call
 				resp, err := cache.PurgeFiles(client, zoneID, validFiles)
@@ -206,18 +206,18 @@ The Cloudflare API requires complete URLs for cache purging.`,
 				if opts.verbose {
 					fmt.Printf("Using batch processing with batch size %d and concurrency %d\n", opts.batchSize, opts.concurrency)
 				}
-				
+
 				// Create batch processor
 				processor := common.NewBatchProcessor().
 					WithBatchSize(opts.batchSize).
 					WithConcurrency(opts.concurrency).
 					WithProgressCallback(func(completed, total, successful int) {
 						if opts.verbose {
-							fmt.Printf("Progress: %d/%d batches completed, %d files purged\n", 
+							fmt.Printf("Progress: %d/%d batches completed, %d files purged\n",
 								completed, total, successful)
 						}
 					})
-					
+
 				// Process in batches
 				successful, errors := processor.ProcessStrings(validFiles, func(batch []string) ([]string, error) {
 					_, err := cache.PurgeFiles(client, zoneID, batch)
@@ -226,14 +226,14 @@ The Cloudflare API requires complete URLs for cache purging.`,
 					}
 					return batch, nil
 				})
-				
+
 				// Report errors if any
 				if len(errors) > 0 {
 					for _, err := range errors {
 						fmt.Printf("Error during batch processing: %s\n", err)
 					}
 				}
-				
+
 				// Report success
 				data := make(map[string]string)
 				data["Operation"] = "Purge Files (Batch)"
@@ -242,21 +242,21 @@ The Cloudflare API requires complete URLs for cache purging.`,
 				data["Batches"] = fmt.Sprintf("%d", (len(validFiles)+opts.batchSize-1)/opts.batchSize)
 				data["Failed Batches"] = fmt.Sprintf("%d", len(errors))
 				data["Status"] = "Complete"
-				
+
 				common.FormatKeyValueTable(data)
 			}
 
 			return nil
 		},
 	}
-	
+
 	// Add command flags
 	cmd.Flags().StringArrayVar(&files, "file", []string{}, "URL or path of a file to purge (can be specified multiple times)")
 	cmd.Flags().StringVar(&filesList, "files-list", "", "Path to a file containing a list of files to purge (one URL per line)")
 	cmd.Flags().IntVar(&batchSize, "batch-size", 100, "Maximum number of files to purge in a single API request (max 500)")
 	cmd.Flags().IntVar(&concurrency, "concurrency", 10, "Maximum number of concurrent API requests (1-50)")
-	
+
 	// No need to update global variables - we use local variables directly
-	
+
 	return cmd
 }

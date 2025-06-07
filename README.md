@@ -75,14 +75,47 @@ curl -LO https://github.com/erfianugrah/cache-kv-purger/releases/download/vX.Y.Z
 # Extract
 tar -xzf cache-kv-purger_Linux_x86_64.tar.gz
 
-# Move to a directory in your PATH
-sudo mv cache-kv-purger /usr/local/bin/
+# Move to a directory in your PATH and rename to 'cf' for convenience
+sudo mv cache-kv-purger /usr/local/bin/cf
 
 # Verify installation
-cache-kv-purger --version
+cf --version
 ```
 
 ### From Source
+
+#### Build Requirements
+- Go 1.21 or higher
+- Make (optional, for using Makefile)
+- Internet connection for downloading dependencies
+
+#### Using Make (Recommended)
+
+```bash
+# Clone the repository
+git clone https://github.com/erfianugrah/cache-kv-purger.git
+cd cache-kv-purger
+
+# Build for current platform
+make build
+
+# Build and install as 'cf' command
+make install
+
+# Build for all platforms
+make build-all
+
+# Run tests
+make test
+
+# Run linter
+make lint
+
+# Clean build artifacts
+make clean
+```
+
+#### Manual Build
 
 ```bash
 # Clone the repository
@@ -98,27 +131,44 @@ go build -o cache-kv-purger ./cmd/cache-kv-purger
 # Run the tool
 ./cache-kv-purger --help
 
-# Optional: Install to system path
-sudo mv cache-kv-purger /usr/local/bin/
+# Optional: Install as 'cf' command
+sudo cp cache-kv-purger /usr/local/bin/cf
 ```
-
-#### Build Requirements
-- Go 1.21 or higher
-- Internet connection for downloading dependencies
 
 #### Build Options
 
 ```bash
-# Standard build
-go build -o cache-kv-purger ./cmd/cache-kv-purger
+# Using Make
+make build              # Build for current platform
+make build-linux        # Build for Linux amd64
+make build-darwin       # Build for macOS amd64
+make build-windows      # Build for Windows amd64
 
-# Build with optimizations (smaller binary, better performance)
+# Manual build with optimizations
 go build -ldflags="-s -w" -o cache-kv-purger ./cmd/cache-kv-purger
 
-# Build for specific platform
+# Cross-compilation examples
 GOOS=linux GOARCH=amd64 go build -o cache-kv-purger-linux ./cmd/cache-kv-purger
 GOOS=darwin GOARCH=amd64 go build -o cache-kv-purger-mac ./cmd/cache-kv-purger
 GOOS=windows GOARCH=amd64 go build -o cache-kv-purger.exe ./cmd/cache-kv-purger
+```
+
+#### Available Make Targets
+
+```bash
+make help          # Show all available targets
+make build         # Build for current platform
+make build-all     # Build for all platforms (Linux, macOS, Windows)
+make install       # Build and install as 'cf' command
+make test          # Run all tests
+make test-coverage # Run tests with coverage report
+make lint          # Run code linter
+make fmt           # Format code
+make tidy          # Tidy go.mod dependencies
+make clean         # Clean build artifacts
+make release       # Create release with goreleaser (requires tag)
+make snapshot      # Create snapshot release
+make ci            # Run all CI checks (deps, lint, test, build)
 ```
 
 ## Authentication
