@@ -124,7 +124,7 @@ func handleItemsForZones(client *api.Client, itemsByZone map[string][]string, cm
 							break
 						}
 					}
-					return false, fmt.Errorf(errMsg)
+					return false, fmt.Errorf("%s", errMsg)
 				}
 
 				fmt.Printf("Successfully purged %d hosts from zone %s\n", len(successful), zoneName)
