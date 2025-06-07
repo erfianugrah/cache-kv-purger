@@ -9,12 +9,12 @@ import (
 
 // RateLimiter implements a token bucket rate limiter
 type RateLimiter struct {
-	mu           sync.Mutex
-	tokens       float64
-	maxTokens    float64
-	refillRate   float64 // tokens per second
-	lastRefill   time.Time
-	waitTimeout  time.Duration
+	mu          sync.Mutex
+	tokens      float64
+	maxTokens   float64
+	refillRate  float64 // tokens per second
+	lastRefill  time.Time
+	waitTimeout time.Duration
 }
 
 // NewRateLimiter creates a new rate limiter
@@ -30,11 +30,11 @@ func NewRateLimiter(ratePerSecond int, burst int, waitTimeout time.Duration) *Ra
 	}
 
 	return &RateLimiter{
-		tokens:       float64(burst),
-		maxTokens:    float64(burst),
-		refillRate:   float64(ratePerSecond),
-		lastRefill:   time.Now(),
-		waitTimeout:  waitTimeout,
+		tokens:      float64(burst),
+		maxTokens:   float64(burst),
+		refillRate:  float64(ratePerSecond),
+		lastRefill:  time.Now(),
+		waitTimeout: waitTimeout,
 	}
 }
 
@@ -82,7 +82,7 @@ func (rl *RateLimiter) WaitN(ctx context.Context, n int) error {
 
 		// Wait with backoff
 		time.Sleep(backoff)
-		
+
 		// Increase backoff
 		backoff *= 2
 		if backoff > maxBackoff {
@@ -123,15 +123,15 @@ func (rl *RateLimiter) tryAcquire(n int) bool {
 func (rl *RateLimiter) refill() {
 	now := time.Now()
 	elapsed := now.Sub(rl.lastRefill).Seconds()
-	
+
 	// Add tokens based on refill rate
 	rl.tokens += elapsed * rl.refillRate
-	
+
 	// Cap at max tokens
 	if rl.tokens > rl.maxTokens {
 		rl.tokens = rl.maxTokens
 	}
-	
+
 	rl.lastRefill = now
 }
 
@@ -139,7 +139,7 @@ func (rl *RateLimiter) refill() {
 func (rl *RateLimiter) Available() int {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
-	
+
 	rl.refill()
 	return int(rl.tokens)
 }
@@ -148,7 +148,7 @@ func (rl *RateLimiter) Available() int {
 func (rl *RateLimiter) SetRate(ratePerSecond int, burst int) {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
-	
+
 	if ratePerSecond > 0 {
 		rl.refillRate = float64(ratePerSecond)
 	}
@@ -163,11 +163,11 @@ func (rl *RateLimiter) SetRate(ratePerSecond int, burst int) {
 
 // MultiRateLimiter manages multiple rate limiters for different endpoints
 type MultiRateLimiter struct {
-	mu         sync.RWMutex
-	limiters   map[string]*RateLimiter
-	defaultRate int
+	mu           sync.RWMutex
+	limiters     map[string]*RateLimiter
+	defaultRate  int
 	defaultBurst int
-	waitTimeout time.Duration
+	waitTimeout  time.Duration
 }
 
 // NewMultiRateLimiter creates a new multi-endpoint rate limiter
@@ -197,21 +197,21 @@ func (mrl *MultiRateLimiter) getLimiter(endpoint string) *RateLimiter {
 	mrl.mu.RLock()
 	limiter, exists := mrl.limiters[endpoint]
 	mrl.mu.RUnlock()
-	
+
 	if exists {
 		return limiter
 	}
-	
+
 	// Create new limiter
 	mrl.mu.Lock()
 	defer mrl.mu.Unlock()
-	
+
 	// Double-check after acquiring write lock
 	limiter, exists = mrl.limiters[endpoint]
 	if exists {
 		return limiter
 	}
-	
+
 	limiter = NewRateLimiter(mrl.defaultRate, mrl.defaultBurst, mrl.waitTimeout)
 	mrl.limiters[endpoint] = limiter
 	return limiter
@@ -221,7 +221,7 @@ func (mrl *MultiRateLimiter) getLimiter(endpoint string) *RateLimiter {
 func (mrl *MultiRateLimiter) SetEndpointRate(endpoint string, ratePerSecond, burst int) {
 	mrl.mu.Lock()
 	defer mrl.mu.Unlock()
-	
+
 	limiter, exists := mrl.limiters[endpoint]
 	if !exists {
 		limiter = NewRateLimiter(ratePerSecond, burst, mrl.waitTimeout)
@@ -252,12 +252,12 @@ func WaitForRateLimit(ctx context.Context, endpoint string) error {
 
 // Common endpoint constants
 const (
-	EndpointKVList      = "kv_list"
-	EndpointKVGet       = "kv_get"
-	EndpointKVPut       = "kv_put"
-	EndpointKVDelete    = "kv_delete"
-	EndpointKVBulk      = "kv_bulk"
-	EndpointKVMetadata  = "kv_metadata"
+	EndpointKVList     = "kv_list"
+	EndpointKVGet      = "kv_get"
+	EndpointKVPut      = "kv_put"
+	EndpointKVDelete   = "kv_delete"
+	EndpointKVBulk     = "kv_bulk"
+	EndpointKVMetadata = "kv_metadata"
 )
 
 // InitializeDefaultRateLimits sets up default rate limits for common endpoints

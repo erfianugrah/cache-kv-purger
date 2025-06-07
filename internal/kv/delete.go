@@ -59,17 +59,17 @@ func DeleteMultipleValues(client *api.Client, accountID, namespaceID string, key
 	}
 
 	fmt.Printf("[DEBUG] DeleteMultipleValues called with %d keys\n", len(keys))
-	
+
 	path := fmt.Sprintf("/accounts/%s/storage/kv/namespaces/%s/bulk/delete", accountID, namespaceID)
 
 	// API expects an array of strings, not objects with 'name' property
 	fmt.Printf("[VERBOSE] Sending bulk delete request to %s with %d keys\n", path, len(keys))
-	
+
 	// Send the keys directly as an array of strings
 	respBody, err := client.Request(http.MethodPost, path, nil, keys)
 	if err != nil {
 		fmt.Printf("[ERROR] Bulk delete request failed: %v\n", err)
-		
+
 		// Fall back to individual deletions if bulk delete fails
 		fmt.Printf("[VERBOSE] Falling back to individual deletions for %d keys\n", len(keys))
 		fallbackErrors := 0
@@ -101,7 +101,7 @@ func DeleteMultipleValues(client *api.Client, accountID, namespaceID string, key
 	}
 
 	fmt.Printf("[DEBUG] API response: success=%v, errors=%v\n", resp.Success, len(resp.Errors))
-	
+
 	if !resp.Success {
 		errorStr := "API reported failure"
 		if len(resp.Errors) > 0 {

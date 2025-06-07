@@ -145,7 +145,11 @@ func NewPooledBatchProcessor(batchSize int) *PooledBatchProcessor {
 
 // GetBatch gets a batch from the pool
 func (bp *PooledBatchProcessor) GetBatch() []interface{} {
-	batch := bp.pool.Get().([]interface{})
+	v := bp.pool.Get()
+	if v == nil {
+		return make([]interface{}, 0, bp.batchSize)
+	}
+	batch := v.([]interface{})
 	return batch[:0] // Reset length but keep capacity
 }
 
@@ -158,13 +162,14 @@ func (bp *PooledBatchProcessor) PutBatch(batch []interface{}) {
 	for i := range batch {
 		batch[i] = nil
 	}
-	bp.pool.Put(batch)
+	// Reset to zero length before putting back in pool
+	bp.pool.Put(batch[:0]) //nolint:staticcheck // SA6002: slices are stored in pool as interface{}
 }
 
 // StringPool provides efficient string interning for frequently used strings
 type StringPool struct {
-	mu    sync.RWMutex
-	pool  map[string]string
+	mu      sync.RWMutex
+	pool    map[string]string
 	maxSize int
 }
 

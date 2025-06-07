@@ -263,7 +263,7 @@ func (s *CloudflareKVService) BulkGet(ctx context.Context, accountID, namespaceI
 	}
 
 	result := make([]KeyValuePair, 0, len(keys))
-	
+
 	// If metadata is requested, use optimized batch fetching
 	if options.IncludeMetadata {
 		// First, get all values
@@ -276,13 +276,13 @@ func (s *CloudflareKVService) BulkGet(ctx context.Context, accountID, namespaceI
 			}
 			keyValueMap[key] = value
 		}
-		
+
 		// Then batch fetch metadata for existing keys
 		existingKeys := make([]string, 0, len(keyValueMap))
 		for key := range keyValueMap {
 			existingKeys = append(existingKeys, key)
 		}
-		
+
 		metadataOpts := &BatchMetadataOptions{
 			BatchSize:   options.BatchSize,
 			Concurrency: options.Concurrency,
@@ -293,9 +293,9 @@ func (s *CloudflareKVService) BulkGet(ctx context.Context, accountID, namespaceI
 		if metadataOpts.Concurrency == 0 {
 			metadataOpts.Concurrency = 50
 		}
-		
+
 		metadataMap, _ := BatchFetchMetadataOptimized(ctx, s.client, accountID, namespaceID, existingKeys, metadataOpts)
-		
+
 		// Combine results
 		for key, value := range keyValueMap {
 			kvp := KeyValuePair{
@@ -343,7 +343,7 @@ func (s *CloudflareKVService) BulkDelete(ctx context.Context, accountID, namespa
 			fmt.Printf("[VERBOSE] "+format+"\n", args...)
 		}
 	}
-	
+
 	debug := func(format string, args ...interface{}) {
 		// Only print debug information in debug mode
 		if options.Debug {
@@ -398,7 +398,7 @@ func (s *CloudflareKVService) BulkDelete(ctx context.Context, accountID, namespa
 	if options.TagField != "" || options.SearchValue != "" {
 		verbose("Using advanced filtering with tag field '%s' or search value '%s'",
 			options.TagField, options.SearchValue)
-		debug("Starting advanced filtering process with field='%s', value='%s'", 
+		debug("Starting advanced filtering process with field='%s', value='%s'",
 			options.TagField, options.SearchValue)
 
 		// If dry run, simulate count for advanced filtering
@@ -453,21 +453,21 @@ func (s *CloudflareKVService) BulkDelete(ctx context.Context, accountID, namespa
 	} else {
 		// Use optimized deletion with binary search fallback
 		verbose("Using optimized deletion with smart fallback")
-		debug("Initializing optimized deletion with batch size %d", options.BatchSize)
-		
+
 		// Set default batch size if not specified
 		batchSize := options.BatchSize
 		if batchSize == 0 {
-			batchSize = 1000 // Default to 1000 keys per batch
+			batchSize = 10000 // Default to 10000 keys per batch
 		}
-		
-		err := DeleteMultipleValuesWithProgress(s.client, accountID, namespaceID, keysToDelete, 
+		debug("Initializing optimized deletion with batch size %d", batchSize)
+
+		err := DeleteMultipleValuesWithProgress(s.client, accountID, namespaceID, keysToDelete,
 			batchSize, func(deleted, total int) {
 				if progressCallback != nil {
 					progressCallback(deleted, total)
 				}
 			})
-		
+
 		if err != nil {
 			return 0, err
 		}
@@ -484,7 +484,7 @@ func (s *CloudflareKVService) bulkDeleteWithAdvancedFiltering(ctx context.Contex
 			fmt.Printf("[VERBOSE] "+format+"\n", args...)
 		}
 	}
-	
+
 	debug := func(format string, args ...interface{}) {
 		// Only print debug information in debug mode
 		if options.Debug {

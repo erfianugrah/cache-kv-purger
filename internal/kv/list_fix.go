@@ -13,9 +13,9 @@ import (
 
 // ListKeysWithPagination is an enhanced version of ListKeysWithOptions that provides
 // better pagination handling and debugging capabilities
-func ListKeysWithPagination(client *api.Client, accountID, namespaceID string, options *ListKeysOptions, 
+func ListKeysWithPagination(client *api.Client, accountID, namespaceID string, options *ListKeysOptions,
 	pagOptions *common.PaginationOptions) (*common.PaginationResult, []KeyValuePair, error) {
-	
+
 	if accountID == "" {
 		return nil, nil, fmt.Errorf("account ID is required")
 	}
@@ -51,11 +51,11 @@ func ListKeysWithPagination(client *api.Client, accountID, namespaceID string, o
 
 	// Create a key listing handler to use with the pagination utility
 	handler := &keyListingHandler{
-		client:     client,
-		accountID:  accountID,
+		client:      client,
+		accountID:   accountID,
 		namespaceID: namespaceID,
-		options:    &requestOptions,
-		allKeys:    []KeyValuePair{},
+		options:     &requestOptions,
+		allKeys:     []KeyValuePair{},
 	}
 
 	// Execute pagination
@@ -145,9 +145,9 @@ func (h *keyListingHandler) ProcessItems(items interface{}) error {
 
 // EnhancedListAllKeys lists all keys in a KV namespace with improved pagination
 // It replaces the old ListAllKeysWithOptions function with more reliable pagination
-func EnhancedListAllKeys(client *api.Client, accountID, namespaceID string, 
+func EnhancedListAllKeys(client *api.Client, accountID, namespaceID string,
 	options *ListKeysOptions, pagOptions *common.PaginationOptions, progressCallback func(fetched, total int)) ([]KeyValuePair, error) {
-	
+
 	// Configure pagination options
 	if pagOptions == nil {
 		pagOptions = &common.PaginationOptions{

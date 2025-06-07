@@ -124,8 +124,8 @@ When used with --namespace-id or --namespace, lists keys in the specified namesp
 			// If namespace ID is not provided, list namespaces
 			if opts.namespaceID == "" {
 				// Create a context with verbosity flags
-				verboseCtx := context.WithValue(cmd.Context(), "verbose", opts.verbose)
-				ctx := context.WithValue(verboseCtx, "debug", opts.debug)
+				verboseCtx := context.WithValue(cmd.Context(), common.VerboseKey, opts.verbose)
+				ctx := context.WithValue(verboseCtx, common.DebugKey, opts.debug)
 
 				// List namespaces with the enhanced context
 				namespaces, err := service.ListNamespaces(ctx, accountID)

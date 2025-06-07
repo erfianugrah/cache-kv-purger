@@ -11,9 +11,9 @@ import (
 )
 
 // WriteMultipleValuesGeneric writes multiple values using GenericBatchProcessor
-func WriteMultipleValuesGeneric(ctx context.Context, client *api.Client, accountID, namespaceID string, 
+func WriteMultipleValuesGeneric(ctx context.Context, client *api.Client, accountID, namespaceID string,
 	items []BulkWriteItem, batchSize int, concurrency int, progressCallback func(completed, total int)) (int, error) {
-	
+
 	if len(items) == 0 {
 		return 0, nil
 	}
@@ -64,15 +64,15 @@ func WriteMultipleValuesGeneric(ctx context.Context, client *api.Client, account
 				if item.ExpirationTTL > 0 {
 					writeOpts.ExpirationTTL = item.ExpirationTTL
 				}
-				
+
 				err := WriteValue(client, accountID, namespaceID, item.Key, item.Value, writeOpts)
 				if err == nil {
 					batchSuccess++
 				}
 			}
-			
+
 			atomic.AddInt32(&successCount, int32(batchSuccess))
-			
+
 			// Return results (number of successful writes per item)
 			results := make([]int, len(batch))
 			for i := range results {
@@ -94,22 +94,22 @@ func WriteMultipleValuesGeneric(ctx context.Context, client *api.Client, account
 
 	// Process items
 	_, errors := processor.ProcessItems(items, processBatch)
-	
+
 	// Return success count even if there were some errors
 	finalCount := int(atomic.LoadInt32(&successCount))
-	
+
 	if len(errors) > 0 && finalCount == 0 {
 		// All failed
 		return 0, fmt.Errorf("all write operations failed: %v", errors[0])
 	}
-	
+
 	return finalCount, nil
 }
 
 // DeleteMultipleValuesGeneric deletes multiple values using GenericBatchProcessor
 func DeleteMultipleValuesGeneric(ctx context.Context, client *api.Client, accountID, namespaceID string,
 	keys []string, batchSize int, concurrency int, progressCallback func(completed, total int)) (int, error) {
-	
+
 	if len(keys) == 0 {
 		return 0, nil
 	}
@@ -146,7 +146,7 @@ func DeleteMultipleValuesGeneric(ctx context.Context, client *api.Client, accoun
 
 		// Use optimized deletion with binary search fallback
 		err := DeleteMultipleValuesOptimized(client, accountID, namespaceID, batch, false)
-		
+
 		var batchSuccess int
 		if err == nil {
 			batchSuccess = len(batch)
@@ -158,9 +158,9 @@ func DeleteMultipleValuesGeneric(ctx context.Context, client *api.Client, accoun
 				}
 			}
 		}
-		
+
 		atomic.AddInt32(&successCount, int32(batchSuccess))
-		
+
 		// Return results
 		results := make([]int, len(batch))
 		for i := range results {
@@ -173,21 +173,21 @@ func DeleteMultipleValuesGeneric(ctx context.Context, client *api.Client, accoun
 
 	// Process items
 	_, errors := processor.ProcessItems(keys, processBatch)
-	
+
 	// Return success count
 	finalCount := int(atomic.LoadInt32(&successCount))
-	
+
 	if len(errors) > 0 && finalCount == 0 {
 		return 0, fmt.Errorf("all delete operations failed: %v", errors[0])
 	}
-	
+
 	return finalCount, nil
 }
 
 // FetchMetadataGeneric fetches metadata using GenericBatchProcessor
 func FetchMetadataGeneric(ctx context.Context, client *api.Client, accountID, namespaceID string,
 	keys []string, concurrency int, progressCallback func(fetched, total int)) (map[string]*KeyValueMetadata, error) {
-	
+
 	if len(keys) == 0 {
 		return make(map[string]*KeyValueMetadata), nil
 	}
@@ -217,9 +217,9 @@ func FetchMetadataGeneric(ctx context.Context, client *api.Client, accountID, na
 		if len(batch) != 1 {
 			return nil, fmt.Errorf("expected single key, got %d", len(batch))
 		}
-		
+
 		key := batch[0]
-		
+
 		// Check context
 		select {
 		case <-ctx.Done():
@@ -245,18 +245,18 @@ func FetchMetadataGeneric(ctx context.Context, client *api.Client, accountID, na
 
 	// Process items
 	_, errors := processor.ProcessItems(keys, processKey)
-	
+
 	// Return results even if there were some errors
 	if len(errors) > 0 && len(results) == 0 {
 		return results, fmt.Errorf("failed to fetch any metadata: %v", errors[0])
 	}
-	
+
 	return results, nil
 }
 
 // TODO: ExportKeysGeneric - Commented out until ExportedKey type is defined
 // func ExportKeysGeneric(ctx context.Context, client *api.Client, accountID, namespaceID string,
-// 	keys []KeyValuePair, includeValues bool, concurrency int, 
+// 	keys []KeyValuePair, includeValues bool, concurrency int,
 // 	progressCallback func(exported, total int)) ([]ExportedKey, error) {
 // 	// Implementation commented out until ExportedKey type is defined
 // }
@@ -265,7 +265,7 @@ func FetchMetadataGeneric(ctx context.Context, client *api.Client, accountID, na
 func PurgeByMetadataGeneric(ctx context.Context, client *api.Client, accountID, namespaceID string,
 	keys []string, metadataField, metadataValue string, batchSize int, concurrency int,
 	progressCallback func(checked, matched, deleted, total int)) (int, error) {
-	
+
 	if len(keys) == 0 {
 		return 0, nil
 	}
@@ -299,7 +299,7 @@ func PurgeByMetadataGeneric(ctx context.Context, client *api.Client, accountID, 
 	// Check function
 	checkMetadata := func(batch []string) ([]bool, error) {
 		key := batch[0]
-		
+
 		// Check context
 		select {
 		case <-ctx.Done():
@@ -332,15 +332,15 @@ func PurgeByMetadataGeneric(ctx context.Context, client *api.Client, accountID, 
 
 	// Now delete matching keys
 	if len(matchingKeys) > 0 {
-		deletedCount, err := DeleteMultipleValuesGeneric(ctx, client, accountID, namespaceID, 
-			matchingKeys, batchSize, concurrency, 
+		deletedCount, err := DeleteMultipleValuesGeneric(ctx, client, accountID, namespaceID,
+			matchingKeys, batchSize, concurrency,
 			func(completed, total int) {
 				atomic.StoreInt32(&deleted, int32(completed))
 				if progressCallback != nil {
 					progressCallback(int(checked), int(matched), int(deleted), len(keys))
 				}
 			})
-		
+
 		return deletedCount, err
 	}
 
@@ -352,17 +352,17 @@ func CheckMetadataMatch(metadata *KeyValueMetadata, field, value string) bool {
 	if metadata == nil {
 		return false
 	}
-	
+
 	// Convert to map for easier access
 	metadataMap := map[string]interface{}(*metadata)
-	
+
 	// Check for exact match
 	if val, exists := metadataMap[field]; exists {
 		if strVal, ok := val.(string); ok && strVal == value {
 			return true
 		}
 	}
-	
+
 	// Check nested fields (simplified)
 	for _, v := range metadataMap {
 		if nestedMap, ok := v.(map[string]interface{}); ok {
@@ -373,6 +373,6 @@ func CheckMetadataMatch(metadata *KeyValueMetadata, field, value string) bool {
 			}
 		}
 	}
-	
+
 	return false
 }

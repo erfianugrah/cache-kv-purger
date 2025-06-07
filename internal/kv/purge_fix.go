@@ -118,7 +118,7 @@ func StreamingPurgeByTagFixed(client *api.Client, accountID, namespaceID, tagFie
 
 				// Update counts atomically
 				atomic.AddInt32(&totalDeleted, int32(len(deleteBatch)))
-				progressCallback(totalKeys, int(atomic.LoadInt32(&totalProcessed)), 
+				progressCallback(totalKeys, int(atomic.LoadInt32(&totalProcessed)),
 					int(atomic.LoadInt32(&totalDeleted)), totalKeys)
 			}
 		}
@@ -154,7 +154,7 @@ func StreamingPurgeByTagFixed(client *api.Client, accountID, namespaceID, tagFie
 
 			// Update counts atomically
 			atomic.AddInt32(&totalDeleted, int32(len(deleteBatch)))
-			progressCallback(totalKeys, int(atomic.LoadInt32(&totalProcessed)), 
+			progressCallback(totalKeys, int(atomic.LoadInt32(&totalProcessed)),
 				int(atomic.LoadInt32(&totalDeleted)), totalKeys)
 		}
 	}
@@ -246,8 +246,8 @@ func PurgeByMetadataOnlyFixed(client *api.Client, accountID, namespaceID, metada
 					// Update progress atomically
 					newProcessed := atomic.AddInt32(&totalProcessed, int32(processed))
 					// Use load functions to get the current values safely
-					progressCallback(totalKeys, int(newProcessed), 
-						int(atomic.LoadInt32(&totalMatched)), 
+					progressCallback(totalKeys, int(newProcessed),
+						int(atomic.LoadInt32(&totalMatched)),
 						int(atomic.LoadInt32(&totalDeleted)), totalKeys)
 				})
 
@@ -311,8 +311,8 @@ func PurgeByMetadataOnlyFixed(client *api.Client, accountID, namespaceID, metada
 
 			// Update deleted count atomically
 			atomic.AddInt32(&totalDeleted, int32(len(batch)))
-			progressCallback(totalKeys, int(atomic.LoadInt32(&totalProcessed)), 
-				int(atomic.LoadInt32(&totalMatched)), 
+			progressCallback(totalKeys, int(atomic.LoadInt32(&totalProcessed)),
+				int(atomic.LoadInt32(&totalMatched)),
 				int(atomic.LoadInt32(&totalDeleted)), totalKeys)
 		}
 	}
@@ -334,7 +334,7 @@ func processMetadataOnlyChunkFixed(client *api.Client, accountID, namespaceID st
 	// Process each key in the chunk checking for metadata
 	for _, key := range chunkKeys {
 		processedIncrement := 1 // Default increment
-		
+
 		// First check if key already has metadata from the list response
 		if key.Metadata != nil {
 			// Check if metadata contains our field
@@ -384,7 +384,7 @@ func processMetadataOnlyChunkFixed(client *api.Client, accountID, namespaceID st
 				}
 			}
 		}
-		
+
 		// Update progress after each key with API call
 		progressCallback(processedIncrement)
 		processed += processedIncrement
@@ -563,10 +563,10 @@ func processKeyChunkOptimizedFixed(client *api.Client, accountID, namespaceID st
 	for pendingItems > 0 {
 		result := <-resultChan
 		pendingItems--
-		
+
 		// Update processing progress
 		processed += result.processed
-		
+
 		// Batch progress updates to reduce callback overhead
 		if result.processed > 0 && (processed%10 == 0 || pendingItems == 0) {
 			progressCallback(result.processed)

@@ -111,19 +111,19 @@ func init() {
 	kvCmd.PersistentFlags().StringVar(&kvFlagsVars.title, "title", "", "Title of the namespace")
 	kvCmd.PersistentFlags().StringVar(&kvFlagsVars.file, "file", "", "Output or input file path")
 	kvCmd.PersistentFlags().StringVar(&kvFlagsVars.key, "key", "", "Key name")
-	
+
 	// Add all KV subcommands directly in kv_cmd.go using the builder pattern
 	kvCmd.AddCommand(cmdutil.NewKVListCommand().Build())
 	kvCmd.AddCommand(cmdutil.NewKVGetCommand().Build())
 	kvCmd.AddCommand(cmdutil.NewKVPutCommand().Build())
-	
+
 	// Instead of adding the original delete command, add the fixed version
 	// kvCmd.AddCommand(cmdutil.NewKVDeleteCommand().Build())
 	addFixedDeleteCommand(kvCmd)
-	
+
 	kvCmd.AddCommand(cmdutil.NewKVCreateCommand().Build())
 	kvCmd.AddCommand(cmdutil.NewKVRenameCommand().Build())
 	kvCmd.AddCommand(cmdutil.NewKVConfigCommand().Build())
-	
+
 	// Demo commands removed for production build
 }

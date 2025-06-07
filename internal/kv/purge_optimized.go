@@ -9,16 +9,16 @@ import (
 
 // PurgeOptimizedOptions provides configuration for optimized purge operations
 type PurgeOptimizedOptions struct {
-	BatchSize       int
-	Concurrency     int
-	UseStreaming    bool
+	BatchSize        int
+	Concurrency      int
+	UseStreaming     bool
 	ProgressCallback func(processed, total int)
 }
 
 // PurgeByPrefixOptimized deletes keys by prefix with minimal memory usage
-func PurgeByPrefixOptimized(ctx context.Context, client *api.Client, accountID, namespaceID, prefix string, 
+func PurgeByPrefixOptimized(ctx context.Context, client *api.Client, accountID, namespaceID, prefix string,
 	options *PurgeOptimizedOptions) (int, error) {
-	
+
 	if options == nil {
 		options = &PurgeOptimizedOptions{
 			BatchSize:    1000,
@@ -68,7 +68,7 @@ func PurgeByPrefixOptimized(ctx context.Context, client *api.Client, accountID, 
 				if len(*batch) >= options.BatchSize {
 					count := deleteKeyBatchOptimized(client, accountID, namespaceID, *batch)
 					deletedCount += count
-					
+
 					// Report progress
 					if options.ProgressCallback != nil {
 						options.ProgressCallback(deletedCount, -1) // -1 indicates unknown total
@@ -117,9 +117,9 @@ func deleteKeyBatchOptimized(client *api.Client, accountID, namespaceID string, 
 }
 
 // purgeByPrefixNonStreaming handles non-streaming purge operations
-func purgeByPrefixNonStreaming(client *api.Client, accountID, namespaceID, prefix string, 
+func purgeByPrefixNonStreaming(client *api.Client, accountID, namespaceID, prefix string,
 	options *PurgeOptimizedOptions) (int, error) {
-	
+
 	// List all keys with prefix
 	listOpts := &ListKeysOptions{
 		Prefix: prefix,
@@ -144,11 +144,11 @@ func purgeByPrefixNonStreaming(client *api.Client, accountID, namespaceID, prefi
 	err = ProcessKeysInBatchesOptimized(*keySlice, options.BatchSize, func(batch []string) error {
 		count := deleteKeyBatchOptimized(client, accountID, namespaceID, batch)
 		deletedCount += count
-		
+
 		if options.ProgressCallback != nil {
 			options.ProgressCallback(deletedCount, len(*keySlice))
 		}
-		
+
 		return nil
 	})
 
@@ -156,9 +156,9 @@ func purgeByPrefixNonStreaming(client *api.Client, accountID, namespaceID, prefi
 }
 
 // FindKeysOptimized searches for keys with minimal memory allocation
-func FindKeysOptimized(client *api.Client, accountID, namespaceID string, 
+func FindKeysOptimized(client *api.Client, accountID, namespaceID string,
 	searchFunc func(key string, metadata *KeyValueMetadata) bool) ([]string, error) {
-	
+
 	// Use streaming to minimize memory usage
 	resultSlice := common.MemoryPools.GetLargeSlice()
 	defer func() {
@@ -173,7 +173,7 @@ func FindKeysOptimized(client *api.Client, accountID, namespaceID string,
 	var cursor string
 	for {
 		listOpts.Cursor = cursor
-		
+
 		result, err := ListKeysWithOptions(client, accountID, namespaceID, listOpts)
 		if err != nil {
 			return nil, err
@@ -289,11 +289,11 @@ func InternMetadataKey(key string) string {
 // OptimizeMetadataStructure reduces memory usage of metadata structures
 func OptimizeMetadataStructure(metadata map[string]interface{}) map[string]interface{} {
 	optimized := make(map[string]interface{}, len(metadata))
-	
+
 	for k, v := range metadata {
 		// Intern frequently used keys
 		internedKey := InternMetadataKey(k)
-		
+
 		// Recursively optimize nested maps
 		if nestedMap, ok := v.(map[string]interface{}); ok {
 			optimized[internedKey] = OptimizeMetadataStructure(nestedMap)
@@ -301,6 +301,6 @@ func OptimizeMetadataStructure(metadata map[string]interface{}) map[string]inter
 			optimized[internedKey] = v
 		}
 	}
-	
+
 	return optimized
 }

@@ -9,14 +9,14 @@ import (
 
 // ConcurrencyManager manages dynamic concurrency for operations
 type ConcurrencyManager struct {
-	mu                sync.RWMutex
-	minWorkers        int
-	maxWorkers        int
-	currentWorkers    int32
-	successRate       float64
-	lastAdjustment    time.Time
-	adjustmentPeriod  time.Duration
-	metrics           *ConcurrencyMetrics
+	mu               sync.RWMutex
+	minWorkers       int
+	maxWorkers       int
+	currentWorkers   int32
+	successRate      float64
+	lastAdjustment   time.Time
+	adjustmentPeriod time.Duration
+	metrics          *ConcurrencyMetrics
 }
 
 // ConcurrencyMetrics tracks performance metrics
@@ -59,12 +59,12 @@ func (cm *ConcurrencyManager) RecordSuccess(responseTime time.Duration) {
 	atomic.AddInt64(&cm.metrics.totalRequests, 1)
 	atomic.AddInt64(&cm.metrics.successfulOps, 1)
 	atomic.StoreInt64(&cm.metrics.lastResponseTime, responseTime.Milliseconds())
-	
+
 	// Update average response time (simple moving average)
 	currentAvg := atomic.LoadInt64(&cm.metrics.avgResponseTime)
 	newAvg := (currentAvg*9 + responseTime.Milliseconds()) / 10
 	atomic.StoreInt64(&cm.metrics.avgResponseTime, newAvg)
-	
+
 	cm.adjustConcurrency()
 }
 
@@ -72,13 +72,13 @@ func (cm *ConcurrencyManager) RecordSuccess(responseTime time.Duration) {
 func (cm *ConcurrencyManager) RecordFailure(isRateLimit bool) {
 	atomic.AddInt64(&cm.metrics.totalRequests, 1)
 	atomic.AddInt64(&cm.metrics.failedOps, 1)
-	
+
 	if isRateLimit {
 		atomic.AddInt64(&cm.metrics.rateLimitHits, 1)
 		// Immediately reduce concurrency on rate limit
 		cm.decreaseConcurrency(0.5) // Reduce by 50%
 	}
-	
+
 	cm.adjustConcurrency()
 }
 
@@ -86,28 +86,26 @@ func (cm *ConcurrencyManager) RecordFailure(isRateLimit bool) {
 func (cm *ConcurrencyManager) adjustConcurrency() {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
-	
+
 	// Don't adjust too frequently
 	if time.Since(cm.lastAdjustment) < cm.adjustmentPeriod {
 		return
 	}
-	
+
 	total := atomic.LoadInt64(&cm.metrics.totalRequests)
 	if total < 100 { // Need enough data
 		return
 	}
-	
+
 	successful := atomic.LoadInt64(&cm.metrics.successfulOps)
 	// failed := atomic.LoadInt64(&cm.metrics.failedOps) // Currently unused
 	rateLimits := atomic.LoadInt64(&cm.metrics.rateLimitHits)
 	avgResponseTime := atomic.LoadInt64(&cm.metrics.avgResponseTime)
-	
+
 	// Calculate success rate
 	successRate := float64(successful) / float64(total)
-	
+
 	// Decide whether to increase or decrease
-	current := atomic.LoadInt32(&cm.currentWorkers)
-	
 	if rateLimits > 0 {
 		// Recent rate limits, decrease significantly
 		cm.decreaseConcurrency(0.7)
@@ -118,33 +116,29 @@ func (cm *ConcurrencyManager) adjustConcurrency() {
 		// Lower success rate or slow responses, decrease
 		cm.decreaseConcurrency(0.9)
 	}
-	
+
 	// Reset metrics for next period
 	atomic.StoreInt64(&cm.metrics.totalRequests, 0)
 	atomic.StoreInt64(&cm.metrics.successfulOps, 0)
 	atomic.StoreInt64(&cm.metrics.failedOps, 0)
 	atomic.StoreInt64(&cm.metrics.rateLimitHits, 0)
-	
+
 	cm.successRate = successRate
 	cm.lastAdjustment = time.Now()
-	
+
 	newWorkers := atomic.LoadInt32(&cm.currentWorkers)
-	if newWorkers != current {
-		// Log adjustment (could be replaced with proper logging)
-		// fmt.Printf("Concurrency adjusted: %d -> %d (success rate: %.2f%%, avg response: %dms)\n", 
-		//     current, newWorkers, successRate*100, avgResponseTime)
-	}
+	_ = newWorkers // Mark as intentionally unused for future logging
 }
 
 // increaseConcurrency increases the worker count by a factor
 func (cm *ConcurrencyManager) increaseConcurrency(factor float64) {
 	current := atomic.LoadInt32(&cm.currentWorkers)
 	newCount := int32(float64(current) * factor)
-	
+
 	if newCount > int32(cm.maxWorkers) {
 		newCount = int32(cm.maxWorkers)
 	}
-	
+
 	atomic.StoreInt32(&cm.currentWorkers, newCount)
 }
 
@@ -152,11 +146,11 @@ func (cm *ConcurrencyManager) increaseConcurrency(factor float64) {
 func (cm *ConcurrencyManager) decreaseConcurrency(factor float64) {
 	current := atomic.LoadInt32(&cm.currentWorkers)
 	newCount := int32(float64(current) * factor)
-	
+
 	if newCount < int32(cm.minWorkers) {
 		newCount = int32(cm.minWorkers)
 	}
-	
+
 	atomic.StoreInt32(&cm.currentWorkers, newCount)
 }
 
@@ -174,23 +168,23 @@ func (cm *ConcurrencyManager) GetMetrics() ConcurrencyMetrics {
 
 // AdaptiveWorkerPool manages a pool of workers with dynamic sizing
 type AdaptiveWorkerPool struct {
-	ctx              context.Context
-	cancel           context.CancelFunc
-	workChan         chan interface{}
-	resultChan       chan interface{}
-	errorChan        chan error
-	concurrencyMgr   *ConcurrencyManager
-	workerFunc       func(context.Context, interface{}) (interface{}, error)
-	activeWorkers    int32
-	wg               sync.WaitGroup
+	ctx            context.Context
+	cancel         context.CancelFunc
+	workChan       chan interface{}
+	resultChan     chan interface{}
+	errorChan      chan error
+	concurrencyMgr *ConcurrencyManager
+	workerFunc     func(context.Context, interface{}) (interface{}, error)
+	activeWorkers  int32
+	wg             sync.WaitGroup
 }
 
 // NewAdaptiveWorkerPool creates a new adaptive worker pool
-func NewAdaptiveWorkerPool(ctx context.Context, minWorkers, maxWorkers int, 
+func NewAdaptiveWorkerPool(ctx context.Context, minWorkers, maxWorkers int,
 	workerFunc func(context.Context, interface{}) (interface{}, error)) *AdaptiveWorkerPool {
-	
+
 	poolCtx, cancel := context.WithCancel(ctx)
-	
+
 	pool := &AdaptiveWorkerPool{
 		ctx:            poolCtx,
 		cancel:         cancel,
@@ -200,13 +194,13 @@ func NewAdaptiveWorkerPool(ctx context.Context, minWorkers, maxWorkers int,
 		concurrencyMgr: NewConcurrencyManager(minWorkers, maxWorkers),
 		workerFunc:     workerFunc,
 	}
-	
+
 	// Start initial workers
 	pool.adjustWorkers()
-	
+
 	// Start worker adjustment routine
 	go pool.monitorAndAdjust()
-	
+
 	return pool
 }
 
@@ -244,7 +238,7 @@ func (p *AdaptiveWorkerPool) Close() error {
 func (p *AdaptiveWorkerPool) adjustWorkers() {
 	targetWorkers := p.concurrencyMgr.GetOptimalConcurrency()
 	currentWorkers := atomic.LoadInt32(&p.activeWorkers)
-	
+
 	if targetWorkers > int(currentWorkers) {
 		// Start more workers
 		for i := currentWorkers; i < int32(targetWorkers); i++ {
@@ -260,18 +254,18 @@ func (p *AdaptiveWorkerPool) adjustWorkers() {
 func (p *AdaptiveWorkerPool) worker() {
 	defer p.wg.Done()
 	defer atomic.AddInt32(&p.activeWorkers, -1)
-	
+
 	for {
 		select {
 		case work, ok := <-p.workChan:
 			if !ok {
 				return
 			}
-			
+
 			start := time.Now()
 			result, err := p.workerFunc(p.ctx, work)
 			duration := time.Since(start)
-			
+
 			if err != nil {
 				p.concurrencyMgr.RecordFailure(isRateLimitError(err))
 				select {
@@ -287,7 +281,7 @@ func (p *AdaptiveWorkerPool) worker() {
 					return
 				}
 			}
-			
+
 		case <-p.ctx.Done():
 			return
 		}
@@ -298,7 +292,7 @@ func (p *AdaptiveWorkerPool) worker() {
 func (p *AdaptiveWorkerPool) monitorAndAdjust() {
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
-	
+
 	for {
 		select {
 		case <-ticker.C:
@@ -316,16 +310,16 @@ func isRateLimitError(err error) bool {
 	}
 	// Check for common rate limit indicators
 	errStr := err.Error()
-	return contains(errStr, "429") || contains(errStr, "rate limit") || 
+	return contains(errStr, "429") || contains(errStr, "rate limit") ||
 		contains(errStr, "too many requests")
 }
 
 // contains checks if a string contains a substring (case-insensitive)
 func contains(s, substr string) bool {
-	return len(s) >= len(substr) && 
-		(s == substr || 
-		 len(s) > len(substr) && 
-		 (stringContains(toLowerCase(s), toLowerCase(substr))))
+	return len(s) >= len(substr) &&
+		(s == substr ||
+			len(s) > len(substr) &&
+				(stringContains(toLowerCase(s), toLowerCase(substr))))
 }
 
 // Simple string utilities to avoid importing strings package

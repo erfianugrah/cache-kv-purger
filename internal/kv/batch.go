@@ -310,7 +310,7 @@ func DeleteMultipleValuesConcurrently(client *api.Client, accountID, namespaceID
 			defer func() { <-sem }() // Release semaphore when done
 
 			fmt.Printf("[VERBOSE] Processing batch %d with %d keys\n", b.batchIndex+1, len(b.batchItems))
-			
+
 			// Delete this batch
 			err := DeleteMultipleValues(client, accountID, namespaceID, b.batchItems)
 

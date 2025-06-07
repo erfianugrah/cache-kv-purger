@@ -5,6 +5,9 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
 
 	"cache-kv-purger/internal/api"
 	"cache-kv-purger/internal/common"
@@ -246,16 +249,18 @@ func ProcessMultiZoneItems(
 	dryRun bool,
 	concurrency int,
 ) (int, int, error) {
-	// Cap concurrency to reasonable limits
+	// Validate and set concurrency limits
 	if concurrency <= 0 {
 		concurrency = 3 // Default
 	} else if concurrency > 5 {
-		concurrency = 5 // Max to avoid overwhelming API
+		concurrency = 5 // Cap at 5 to avoid overwhelming API
 	}
 
 	// Track progress
-	successCount := 0
-	totalItems := 0
+	var totalItems int
+	for _, items := range itemsByZone {
+		totalItems += len(items)
+	}
 
 	// For dry-run, just show what would be processed
 	if dryRun {
@@ -281,40 +286,130 @@ func ProcessMultiZoneItems(
 					}
 				}
 			}
-
-			totalItems += len(items)
 		}
 
-		fmt.Printf("DRY RUN SUMMARY: Would process %d total items across %d zones\n", totalItems, len(itemsByZone))
+		fmt.Printf("DRY RUN SUMMARY: Would process %d total items across %d zones (concurrency: %d)\n", 
+			totalItems, len(itemsByZone), concurrency)
 		return totalItems, len(itemsByZone), nil
 	}
 
-	// Process all zones with actual operation
+	// Process zones concurrently
+	type zoneResult struct {
+		zoneID   string
+		zoneName string
+		success  bool
+		err      error
+		itemCount int
+	}
+
+	// Create work items
+	type zoneWork struct {
+		zoneID string
+		items  []string
+		index  int
+		total  int
+	}
+
+	work := make([]zoneWork, 0, len(itemsByZone))
+	index := 0
 	for zoneID, items := range itemsByZone {
-		totalItems += len(items)
+		work = append(work, zoneWork{
+			zoneID: zoneID, 
+			items: items,
+			index: index + 1,
+			total: len(itemsByZone),
+		})
+		index++
+	}
 
-		// Get zone info for display
-		zoneInfo, err := GetZoneDetails(client, zoneID)
-		zoneName := zoneID
-		if err == nil && zoneInfo.Result.Name != "" {
-			zoneName = zoneInfo.Result.Name
-		}
+	// Create channels
+	workChan := make(chan zoneWork, len(work))
+	resultChan := make(chan zoneResult, len(work))
 
-		// Process items for this zone
-		success, err := handler(zoneID, zoneName, items)
-		if err != nil {
-			fmt.Printf("Error processing items for zone %s: %s\n", zoneName, err)
-			continue
-		}
+	// Progress tracking
+	var processedZones int32
+	startTime := time.Now()
 
-		if success {
+	// Start workers
+	var wg sync.WaitGroup
+	for i := 0; i < concurrency; i++ {
+		wg.Add(1)
+		go func(workerID int) {
+			defer wg.Done()
+			for w := range workChan {
+				// Progress update
+				current := atomic.AddInt32(&processedZones, 1)
+				if verbose {
+					fmt.Printf("[Worker %d] Processing zone %d/%d...\n", workerID+1, current, w.total)
+				}
+
+				// Get zone info for display
+				zoneInfo, err := GetZoneDetails(client, w.zoneID)
+				zoneName := w.zoneID
+				if err == nil && zoneInfo.Result.Name != "" {
+					zoneName = zoneInfo.Result.Name
+				}
+
+				// Process items for this zone
+				startZone := time.Now()
+				success, err := handler(w.zoneID, zoneName, w.items)
+				duration := time.Since(startZone)
+				
+				if verbose && err == nil {
+					fmt.Printf("[Worker %d] Zone %s processed in %v\n", workerID+1, zoneName, duration)
+				}
+				
+				resultChan <- zoneResult{
+					zoneID:   w.zoneID,
+					zoneName: zoneName,
+					success:  success,
+					err:      err,
+					itemCount: len(w.items),
+				}
+			}
+		}(i)
+	}
+
+	// Send work to workers
+	for _, w := range work {
+		workChan <- w
+	}
+	close(workChan)
+
+	// Wait for workers to finish
+	go func() {
+		wg.Wait()
+		close(resultChan)
+	}()
+
+	// Collect results
+	successCount := 0
+	var errors []error
+	processedItems := 0
+	
+	for result := range resultChan {
+		if result.err != nil {
+			errors = append(errors, fmt.Errorf("zone %s: %w", result.zoneName, result.err))
+			fmt.Printf("❌ Error processing zone %s: %s\n", result.zoneName, result.err)
+		} else if result.success {
 			successCount++
+			processedItems += result.itemCount
+			if !verbose {
+				fmt.Printf("✅ Zone %s: %d items processed\n", result.zoneName, result.itemCount)
+			}
 		}
 	}
 
 	// Final summary
-	fmt.Printf("Successfully processed %d items across %d/%d zones\n", totalItems, successCount, len(itemsByZone))
-	return totalItems, successCount, nil
+	totalDuration := time.Since(startTime)
+	fmt.Printf("\n🏁 Completed in %v: %d items across %d/%d zones (concurrency: %d)\n", 
+		totalDuration, processedItems, successCount, len(itemsByZone), concurrency)
+	
+	if len(errors) > 0 {
+		fmt.Printf("⚠️  %d zones had errors\n", len(errors))
+	}
+	
+	return processedItems, successCount, nil
 }
 
 // ResolveZoneIdentifiers resolves zone identifiers from a list of zone names or IDs

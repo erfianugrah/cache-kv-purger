@@ -55,8 +55,8 @@ func NewClient(options ...ClientOption) (*Client, error) {
 		MaxConnsPerHost:     100,              // Limit concurrent connections
 		IdleConnTimeout:     90 * time.Second, // Keep connections alive longer
 		TLSHandshakeTimeout: 10 * time.Second,
-		DisableCompression:  true,              // API responses are already compressed
-		ForceAttemptHTTP2:   true,              // Enable HTTP/2 for multiplexing
+		DisableCompression:  true, // API responses are already compressed
+		ForceAttemptHTTP2:   true, // Enable HTTP/2 for multiplexing
 	}
 
 	// Create client with default values
@@ -98,13 +98,13 @@ func (c *Client) GetTransportStats() (idleConns int, totalConns int) {
 func (c *Client) Request(method, path string, query url.Values, body interface{}) ([]byte, error) {
 	// Determine endpoint for rate limiting
 	endpoint := determineEndpoint(method, path)
-	
+
 	// Wait for rate limit
 	ctx := context.Background()
 	if err := common.WaitForRateLimit(ctx, endpoint); err != nil {
 		return nil, fmt.Errorf("rate limit: %w", err)
 	}
-	
+
 	// Build URL
 	u, err := url.Parse(c.BaseURL + path)
 	if err != nil {
@@ -157,7 +157,7 @@ func (c *Client) Request(method, path string, query url.Values, body interface{}
 	// Read response body using pooled buffer
 	buf := common.MemoryPools.GetByteBuffer()
 	defer common.MemoryPools.PutByteBuffer(buf)
-	
+
 	_, err = io.Copy(buf, resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("reading response body: %w", err)
@@ -185,12 +185,12 @@ func (c *Client) Request(method, path string, query url.Values, body interface{}
 func (c *Client) RequestWithContext(ctx context.Context, method, path string, query url.Values, body interface{}) ([]byte, error) {
 	// Determine endpoint for rate limiting
 	endpoint := determineEndpoint(method, path)
-	
+
 	// Wait for rate limit
 	if err := common.WaitForRateLimit(ctx, endpoint); err != nil {
 		return nil, fmt.Errorf("rate limit: %w", err)
 	}
-	
+
 	// Build URL
 	u, err := url.Parse(c.BaseURL + path)
 	if err != nil {
@@ -243,7 +243,7 @@ func (c *Client) RequestWithContext(ctx context.Context, method, path string, qu
 	// Read response body using pooled buffer
 	buf := common.MemoryPools.GetByteBuffer()
 	defer common.MemoryPools.PutByteBuffer(buf)
-	
+
 	_, err = io.Copy(buf, resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("reading response body: %w", err)
@@ -280,7 +280,7 @@ func (c *Client) RequestWithContext(ctx context.Context, method, path string, qu
 func determineEndpoint(method, path string) string {
 	// Normalize path
 	path = strings.ToLower(path)
-	
+
 	// KV operations
 	if strings.Contains(path, "/storage/kv/namespaces") {
 		if strings.Contains(path, "/bulk") {
@@ -305,7 +305,7 @@ func determineEndpoint(method, path string) string {
 		// Default KV operation
 		return common.EndpointKVGet
 	}
-	
+
 	// Default endpoint
 	return "default"
 }

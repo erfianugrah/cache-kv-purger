@@ -12,11 +12,11 @@ import (
 
 // ListNamespacesOptions provides advanced options for listing namespaces
 type ListNamespacesOptions struct {
-	Debug      bool // Enable debug output
-	Verbose    bool // Enable verbose output
-	MaxRetries int  // Maximum number of retries for failed requests
+	Debug      bool          // Enable debug output
+	Verbose    bool          // Enable verbose output
+	MaxRetries int           // Maximum number of retries for failed requests
 	Timeout    time.Duration // Timeout for the entire operation
-	PageLimit  int  // Maximum number of pages to fetch (0 = no limit)
+	PageLimit  int           // Maximum number of pages to fetch (0 = no limit)
 }
 
 // ListNamespacesResult contains the results of a namespace listing operation
@@ -32,7 +32,7 @@ func EnhancedListNamespaces(client *api.Client, accountID string, options *ListN
 	if accountID == "" {
 		return nil, fmt.Errorf("account ID is required")
 	}
-	
+
 	// Initialize default options if needed
 	if options == nil {
 		options = &ListNamespacesOptions{
@@ -40,32 +40,32 @@ func EnhancedListNamespaces(client *api.Client, accountID string, options *ListN
 			Timeout:    30 * time.Second,
 		}
 	}
-	
+
 	// Initialize debugging functions
 	debug := func(format string, args ...interface{}) {
 		if options.Debug {
 			fmt.Printf("[DEBUG] "+format+"\n", args...)
 		}
 	}
-	
+
 	verbose := func(format string, args ...interface{}) {
 		if options.Verbose {
 			fmt.Printf("[INFO] "+format+"\n", args...)
 		}
 	}
-	
+
 	debug("Starting enhanced namespace listing for account: %s", accountID)
 	verbose("Fetching namespaces...")
-	
+
 	path := fmt.Sprintf("/accounts/%s/storage/kv/namespaces", accountID)
-	
+
 	var allNamespaces []Namespace
 	var cursor string
 	var seenCursors = make(map[string]bool)
 	var warnings []string
 	pageCount := 0
 	startTime := time.Now()
-	
+
 	// Set an overall timeout if specified
 	var timeoutChan <-chan time.Time
 	if options.Timeout > 0 {
@@ -73,9 +73,9 @@ func EnhancedListNamespaces(client *api.Client, accountID string, options *ListN
 		defer timer.Stop()
 		timeoutChan = timer.C
 	}
-	
+
 	debug("Beginning pagination loop")
-	
+
 	// Loop for pagination
 	for {
 		// Check for timeout
@@ -90,7 +90,7 @@ func EnhancedListNamespaces(client *api.Client, accountID string, options *ListN
 				// Continue with the loop
 			}
 		}
-		
+
 		// Check if we've hit the page limit
 		if options.PageLimit > 0 && pageCount >= options.PageLimit {
 			warning := fmt.Sprintf("Reached configured page limit (%d), results may be incomplete", options.PageLimit)
@@ -98,7 +98,7 @@ func EnhancedListNamespaces(client *api.Client, accountID string, options *ListN
 			verbose(warning)
 			break
 		}
-		
+
 		// Set up query parameters for pagination if we have a cursor
 		var queryParams url.Values
 		if cursor != "" {
@@ -108,7 +108,7 @@ func EnhancedListNamespaces(client *api.Client, accountID string, options *ListN
 		} else {
 			debug("Fetching first page")
 		}
-		
+
 		respBody, err := client.Request(http.MethodGet, path, queryParams, nil)
 		if err != nil {
 			// Check if this is a retryable error and we have retries left
@@ -120,12 +120,12 @@ func EnhancedListNamespaces(client *api.Client, accountID string, options *ListN
 			}
 			return nil, fmt.Errorf("failed to request namespaces: %w", err)
 		}
-		
+
 		var nsResp NamespacesResponse
 		if err := json.Unmarshal(respBody, &nsResp); err != nil {
 			return nil, fmt.Errorf("failed to parse API response: %w", err)
 		}
-		
+
 		if !nsResp.Success {
 			errorStr := "API reported failure"
 			if len(nsResp.Errors) > 0 {
@@ -133,34 +133,34 @@ func EnhancedListNamespaces(client *api.Client, accountID string, options *ListN
 			}
 			return nil, fmt.Errorf("failed to list namespaces: %s", errorStr)
 		}
-		
+
 		// Increment page counter
 		pageCount++
-		
+
 		// Get current page information
 		currentPageCount := len(nsResp.Result)
 		currentPageCursor := nsResp.ResultInfo.Cursor
-		
+
 		debug("Page %d: Retrieved %d namespaces", pageCount, currentPageCount)
 		verbose("Retrieved %d namespaces (total so far: %d)", currentPageCount, len(allNamespaces)+currentPageCount)
-		
+
 		// Check for suspicious empty results
 		if currentPageCount == 0 && currentPageCursor != "" {
 			warning := "Received empty result set with non-empty cursor, possible API inconsistency"
 			warnings = append(warnings, warning)
 			verbose(warning)
 		}
-		
+
 		// Append results from this page
 		allNamespaces = append(allNamespaces, nsResp.Result...)
-		
+
 		// Check if we need to fetch more pages
 		cursor = currentPageCursor
 		if cursor == "" {
 			debug("No more pages (empty cursor)")
 			break
 		}
-		
+
 		// Detect cursor loops (can happen with eventual consistency issues)
 		if seenCursors[cursor] {
 			warning := fmt.Sprintf("Detected cursor loop (%s), breaking pagination to avoid infinite loop", cursor)
@@ -168,23 +168,23 @@ func EnhancedListNamespaces(client *api.Client, accountID string, options *ListN
 			verbose(warning)
 			break
 		}
-		
+
 		// Record the cursor we've seen
 		seenCursors[cursor] = true
-		
+
 		// Simple output of progress if verbose
 		if options.Verbose && pageCount > 1 {
 			elapsedTime := time.Since(startTime)
-			verbose("Pagination progress: %d pages, %d namespaces, %v elapsed", 
+			verbose("Pagination progress: %d pages, %d namespaces, %v elapsed",
 				pageCount, len(allNamespaces), elapsedTime.Round(time.Millisecond))
 		}
 	}
-	
+
 FINISH:
 	debug("Pagination complete: retrieved %d namespaces in %d pages", len(allNamespaces), pageCount)
-	verbose("Found %d namespaces in %d pages, took %v", 
+	verbose("Found %d namespaces in %d pages, took %v",
 		len(allNamespaces), pageCount, time.Since(startTime).Round(time.Millisecond))
-	
+
 	// Return the results with metadata
 	result := &ListNamespacesResult{
 		Namespaces: allNamespaces,
@@ -192,7 +192,7 @@ FINISH:
 		PageCount:  pageCount,
 		Warnings:   warnings,
 	}
-	
+
 	return result, nil
 }
 
@@ -203,12 +203,12 @@ func ListNamespacesWithOutput(client *api.Client, accountID string, options *Lis
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Print any warnings
 	for _, warning := range result.Warnings {
 		fmt.Printf("WARNING: %s\n", warning)
 	}
-	
+
 	// Print pagination info if more than one page
 	if result.PageCount > 1 {
 		if options != nil && options.Verbose {
@@ -217,6 +217,6 @@ func ListNamespacesWithOutput(client *api.Client, accountID string, options *Lis
 			fmt.Printf("Retrieved %d namespaces\n", result.TotalCount)
 		}
 	}
-	
+
 	return result.Namespaces, nil
 }
