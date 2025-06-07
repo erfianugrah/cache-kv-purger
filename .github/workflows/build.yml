@@ -41,9 +41,11 @@ jobs:
     - name: Build
       run: |
         mkdir -p build
-        GOOS=${{ matrix.GOOS }} GOARCH=${{ matrix.GOARCH }} go build -v -ldflags "-s -w" -o build/${{ matrix.output }} ./cmd/cache-kv-purger
+        go build -v -ldflags "-s -w" -o build/${{ matrix.output }} ./cmd/cache-kv-purger
       env:
         CGO_ENABLED: 0
+        GOOS: ${{ matrix.GOOS }}
+        GOARCH: ${{ matrix.GOARCH }}
 
     - name: Upload binary as artifact
       uses: actions/upload-artifact@v4
